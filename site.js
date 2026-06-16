@@ -1359,11 +1359,17 @@ function renderGameVotePoll(config) {
   gameVotePoll.hidden = !config.published;
   if (!config.published) return;
 
-  renderPollInfo(gameVoteInfo, config.info);
-  renderPollResultButtonInSection(gameVotePoll, "Game Voting", () => createGameVoteResults(config));
   const submitButton = gameVoteForm.querySelector("button");
   const participantName = getParticipantName();
-  const savedAnswers = participantName ? getGameVoteEntry(participantName)?.answers ?? [] : [];
+  const savedEntry = participantName ? getGameVoteEntry(participantName) : null;
+  if (savedEntry && !isAdminLoggedIn()) {
+    gameVotePoll.hidden = true;
+    return;
+  }
+
+  renderPollInfo(gameVoteInfo, config.info);
+  renderPollResultButtonInSection(gameVotePoll, "Game Voting", () => createGameVoteResults(config));
+  const savedAnswers = savedEntry?.answers ?? [];
   const groups = getGameVoteGroups(config).filter((group) => Array.isArray(group.options) && group.options.length);
   gameVoteOptions.replaceChildren();
 
@@ -1389,7 +1395,11 @@ async function loadPolls() {
   renderAvailabilityPoll(polls.availability);
   renderSuggestionPoll(polls.suggestions);
   renderGameVotePoll(polls.gameVote);
-  pollEmpty.hidden = polls.availability.published || polls.suggestions.published || polls.gameVote.published;
+  pollEmpty.hidden = Boolean(
+    (polls.availability.published && !availabilityPoll?.hidden)
+      || (polls.suggestions.published && !suggestionPoll?.hidden)
+      || (polls.gameVote.published && !gameVotePoll?.hidden)
+  );
 }
 
 availabilityForm?.addEventListener("submit", (event) => {
