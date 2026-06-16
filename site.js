@@ -1023,6 +1023,8 @@ function syncParticipantCard() {
     closeParticipantDialog();
     return;
   }
+
+  openParticipantDialog();
 }
 
 function ensureParticipantName() {
@@ -2067,22 +2069,10 @@ function createUserAdmin(participants = []) {
   form.className = "admin-form user-admin-form";
   const status = document.createElement("p");
   status.className = "form-status";
-  const addName = createAdminInput("text");
-  const addButton = createActionButton("User hinzufügen", "admin-secondary-button");
   const clearAllButton = createActionButton("Alle User löschen", "admin-remove-button");
   const listTitle = document.createElement("h4");
   listTitle.textContent = "Teilnehmer";
   const knownParticipants = getKnownParticipants(participants);
-
-  addButton.addEventListener("click", () => {
-    const nextName = addName.value.trim();
-    if (!nextName) {
-      status.textContent = "Bitte einen Namen eintragen.";
-      return;
-    }
-    queueRemoteWrite(saveRemoteParticipantEntry(nextName));
-    refreshAfterAdminSave(status, "User hinzugefügt.");
-  });
 
   clearAllButton.addEventListener("click", () => {
     if (!knownParticipants.length) {
@@ -2141,11 +2131,9 @@ function createUserAdmin(participants = []) {
   );
 
   form.append(
-    createAdminField("Neuer User", addName),
-    addButton,
-    clearAllButton,
     listTitle,
     entries,
+    clearAllButton,
     status
   );
 
