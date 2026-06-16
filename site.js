@@ -39,6 +39,7 @@ const remoteStore = {};
 const pendingRemoteWrites = [];
 let remotePollDataLoaded = false;
 let adminSessionValidated = false;
+let participantValidationPromise = null;
 const clientStorageKeys = new Set(["adminSession", "pollParticipantName"]);
 const defaultSupabaseConfig = {
   url: "https://brizdcpbzqqrkxunfiwl.supabase.co",
@@ -500,6 +501,13 @@ function saveRemoteParticipantEntry(name) {
     body: JSON.stringify({
       participant_name_input: name,
     }),
+  });
+}
+
+function remoteParticipantExists(name) {
+  return supabaseFetch("rpc/participant_exists", {
+    method: "POST",
+    body: JSON.stringify({ participant_name_input: name }),
   });
 }
 
@@ -1015,16 +1023,44 @@ function closeParticipantDialog() {
   if (participantDialog?.open) participantDialog.close();
 }
 
+async function validateSavedParticipantName() {
+  const savedName = getSavedParticipantName();
+  if (!savedName) {
+    openParticipantDialog();
+    return "";
+  }
+
+  if (!supabaseEnabled) {
+    closeParticipantDialog();
+    return savedName;
+  }
+
+  const existsOnline = await remoteParticipantExists(savedName);
+  if (existsOnline === false) {
+    setSavedParticipantName("");
+    renderParticipantCardStatus("Dein Name wurde zurückgesetzt. Bitte neu eintragen.", true);
+    openParticipantDialog();
+    return "";
+  }
+
+  closeParticipantDialog();
+  return savedName;
+}
+
 function syncParticipantCard() {
   if (!participantNameInput) return;
   const savedName = getSavedParticipantName();
 
-  if (savedName) {
-    closeParticipantDialog();
+  if (!savedName) {
+    openParticipantDialog();
     return;
   }
 
-  openParticipantDialog();
+  closeParticipantDialog();
+  participantValidationPromise ??= validateSavedParticipantName()
+    .finally(() => {
+      participantValidationPromise = null;
+    });
 }
 
 function ensureParticipantName() {

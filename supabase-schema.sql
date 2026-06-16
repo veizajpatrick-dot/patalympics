@@ -105,6 +105,19 @@ begin
 end;
 $$;
 
+create or replace function public.participant_exists(participant_name_input text)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.participants
+    where lower(trim(participant_name)) = lower(trim(participant_name_input))
+  );
+$$;
+
 create or replace function public.admin_rename_participant(old_name text, new_name text)
 returns void
 language plpgsql
@@ -202,6 +215,7 @@ end;
 $$;
 
 grant execute on function public.register_participant(text) to anon, authenticated;
+grant execute on function public.participant_exists(text) to anon, authenticated;
 grant execute on function public.admin_rename_participant(text, text) to authenticated;
 grant execute on function public.admin_delete_participant(text) to authenticated;
 
