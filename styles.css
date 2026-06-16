@@ -534,7 +534,7 @@ h1 {
 .participant-chip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 14px;
   padding: 14px 16px;
   border-color: rgba(245, 191, 105, 0.26);
@@ -555,13 +555,6 @@ h1 {
 .participant-chip-copy strong {
   color: var(--sand);
   font-size: 0.96rem;
-}
-
-.participant-chip-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .participant-dialog {
@@ -1337,17 +1330,7 @@ h1 {
 
 @media (max-width: 760px) {
   .participant-chip {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .participant-chip-actions {
-    justify-content: stretch;
-  }
-
-  .participant-chip-actions button {
-    flex: 1 1 0;
-    min-width: 0;
+    align-items: flex-start;
   }
 
   .admin-grid {

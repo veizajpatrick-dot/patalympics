@@ -34,6 +34,12 @@ create table if not exists public.poll_game_votes (
   unique (participant_name)
 );
 
+create table if not exists public.participants (
+  id uuid primary key default gen_random_uuid(),
+  participant_name text not null unique,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.admin_users (
   user_id uuid primary key references auth.users(id) on delete cascade,
   email text unique not null,
@@ -44,6 +50,7 @@ alter table public.site_content enable row level security;
 alter table public.poll_availability_answers enable row level security;
 alter table public.poll_game_suggestions enable row level security;
 alter table public.poll_game_votes enable row level security;
+alter table public.participants enable row level security;
 alter table public.admin_users enable row level security;
 
 grant usage on schema public to anon;
@@ -56,6 +63,8 @@ grant select, insert, delete on public.poll_game_suggestions to anon;
 grant select, insert, delete on public.poll_game_suggestions to authenticated;
 grant select, insert, update, delete on public.poll_game_votes to anon;
 grant select, insert, update, delete on public.poll_game_votes to authenticated;
+grant insert on public.participants to anon;
+grant select, insert, delete on public.participants to authenticated;
 grant select on public.admin_users to authenticated;
 
 drop policy if exists "public read site content" on public.site_content;
@@ -190,6 +199,37 @@ with check (char_length(participant_name) between 1 and 80);
 drop policy if exists "public delete votes" on public.poll_game_votes;
 create policy "admin delete votes"
 on public.poll_game_votes for delete
+to authenticated
+using (
+  char_length(participant_name) between 1 and 80
+  and exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "public write participants" on public.participants;
+create policy "public write participants"
+on public.participants for insert
+to anon, authenticated
+with check (char_length(participant_name) between 1 and 80);
+
+drop policy if exists "admin read participants" on public.participants;
+create policy "admin read participants"
+on public.participants for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "admin delete participants" on public.participants;
+create policy "admin delete participants"
+on public.participants for delete
 to authenticated
 using (
   char_length(participant_name) between 1 and 80
