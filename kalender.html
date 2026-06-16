@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kalender | Patalympics</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header" aria-label="Hauptnavigation">
+      <a class="brand" href="index.html" aria-label="Patalympics Startseite">
+        <span class="brand-mark">P</span>
+        <span>Patalympics</span>
+      </a>
+
+      <nav class="main-nav" aria-label="Seiten">
+        <a href="news.html">News</a>
+        <a class="active" href="kalender.html">Kalender</a>
+        <a href="rangliste.html">Rangliste</a>
+        <a href="poll.html">Poll</a>
+        <a href="hall-of-fame.html">Hall of Fame</a>
+      </nav>
+    </header>
+
+    <main class="page-shell content-page">
+      <div class="page-shade"></div>
+      <section class="content-panel calendar-panel" aria-labelledby="calendar-title">
+        <div class="section-head calendar-head">
+          <button class="icon-button" id="prev-month" type="button" aria-label="Vorheriger Monat">‹</button>
+          <h1 id="calendar-title">Kalender</h1>
+          <button class="icon-button" id="next-month" type="button" aria-label="Nächster Monat">›</button>
+        </div>
+        <div class="calendar-weekdays" aria-hidden="true">
+          <span>Mo</span>
+          <span>Di</span>
+          <span>Mi</span>
+          <span>Do</span>
+          <span>Fr</span>
+          <span>Sa</span>
+          <span>So</span>
+        </div>
+        <div id="calendar-grid" class="calendar-grid" aria-live="polite"></div>
+      </section>
+    </main>
+    <script src="supabase-config.js"></script>
+    <script src="site.js"></script>
+  </body>
+</html>
