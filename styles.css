@@ -540,32 +540,6 @@ h1 {
   font-size: 0.9rem;
 }
 
-.participant-chip {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 14px;
-  padding: 14px 16px;
-  border-color: rgba(245, 191, 105, 0.26);
-}
-
-.participant-chip-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.participant-chip-copy span {
-  color: rgba(255, 250, 241, 0.58);
-  font-size: 0.72rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.participant-chip-copy strong {
-  color: var(--sand);
-  font-size: 0.96rem;
-}
-
 .participant-dialog {
   width: min(420px, calc(100vw - 28px));
   padding: 0;
@@ -1366,10 +1340,6 @@ h1 {
 }
 
 @media (max-width: 760px) {
-  .participant-chip {
-    align-items: flex-start;
-  }
-
   .admin-grid {
     grid-template-columns: 1fr;
   }

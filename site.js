@@ -23,8 +23,6 @@ const gameVoteForm = document.querySelector("#game-vote-form");
 const gameVoteOptions = document.querySelector("#game-vote-options");
 const gameVoteStatus = document.querySelector("#game-vote-status");
 const userContent = document.querySelector("#user-content");
-let participantChip = document.querySelector("#participant-chip");
-let participantCurrentName = document.querySelector("#participant-current-name");
 let participantDialog = document.querySelector("#participant-dialog");
 let participantForm = document.querySelector("#participant-form");
 let participantCloseButton = document.querySelector("#participant-close");
@@ -247,6 +245,7 @@ async function refreshAdminSession() {
     nextSession.isAdmin = await hasAdminAccess(nextSession.accessToken);
     if (!nextSession.isAdmin) throw new Error("Kein Admin-Zugang");
     setSavedAdminSession(nextSession);
+    document.dispatchEvent(new CustomEvent("admin-state-change"));
     return nextSession;
   } catch {
     clearAdminSession();
@@ -935,8 +934,6 @@ function getParticipantName() {
 }
 
 function refreshParticipantElements() {
-  participantChip = document.querySelector("#participant-chip");
-  participantCurrentName = document.querySelector("#participant-current-name");
   participantDialog = document.querySelector("#participant-dialog");
   participantForm = document.querySelector("#participant-form");
   participantCloseButton = document.querySelector("#participant-close");
@@ -990,8 +987,6 @@ function closeParticipantDialog() {
 function syncParticipantCard() {
   if (!participantNameInput) return;
   const savedName = getSavedParticipantName();
-  if (participantChip) participantChip.hidden = !savedName;
-  if (participantCurrentName) participantCurrentName.textContent = savedName;
 
   if (savedName) {
     saveRemoteParticipantEntry(savedName);
@@ -999,7 +994,6 @@ function syncParticipantCard() {
     return;
   }
 
-  if (participantChip) participantChip.hidden = true;
   openParticipantDialog();
 }
 
@@ -1610,6 +1604,37 @@ function isAdminLoggedIn() {
   return Boolean(getSavedAdminSession()?.isAdmin);
 }
 
+function refreshAdminNavigation() {
+  const currentPage = globalThis.location.pathname.split("/").pop() || "index.html";
+
+  document.querySelectorAll(".main-nav").forEach((nav) => {
+    const existingLink = nav.querySelector('[data-admin-nav="user"]');
+
+    if (!isAdminLoggedIn()) {
+      existingLink?.remove();
+      return;
+    }
+
+    if (existingLink) {
+      existingLink.classList.toggle("active", currentPage === "user.html");
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.href = "user.html";
+    link.textContent = "User";
+    link.dataset.adminNav = "user";
+    link.classList.toggle("active", currentPage === "user.html");
+
+    const hallOfFameLink = nav.querySelector('a[href="hall-of-fame.html"]');
+    if (hallOfFameLink) {
+      nav.insertBefore(link, hallOfFameLink);
+    } else {
+      nav.append(link);
+    }
+  });
+}
+
 function createAdminField(labelText, input) {
   const label = document.createElement("label");
   label.className = "field";
@@ -1786,7 +1811,7 @@ async function renderAdminPanel(modalBody) {
   wrap.append(
     renderAdminSection("News", createNewsAdmin(data.news)),
     renderAdminSection("Kalender", createCalendarAdmin(data.calendar)),
-    renderAdminSection("Polls", createPollAdmin(data.polls, data.participants)),
+    renderAdminSection("Polls", createPollAdmin(data.polls)),
     renderAdminSection("User", createUserAdmin(data.participants)),
     renderAdminSection("Rangliste", createRankingAdmin(data.ranking))
   );
@@ -1814,7 +1839,7 @@ function getInlineAdminConfig(data) {
   if (path.endsWith("/poll.html")) {
     return {
       title: "Polls bearbeiten",
-      content: createPollAdmin(data.polls, data.participants),
+      content: createPollAdmin(data.polls),
     };
   }
 
@@ -2078,7 +2103,7 @@ function createUserAdmin(participants = []) {
   return form;
 }
 
-function createPollAdmin(polls, participants = []) {
+function createPollAdmin(polls) {
   const form = document.createElement("form");
   form.className = "admin-form poll-admin-form";
   const status = document.createElement("p");
@@ -2514,6 +2539,7 @@ function initAdminUi() {
   }
 
   document.addEventListener("admin-state-change", updateLogoutVisibility);
+  document.addEventListener("admin-state-change", refreshAdminNavigation);
 
   const modal = document.createElement("dialog");
   modal.className = "admin-modal";
@@ -2551,8 +2577,10 @@ function initAdminUi() {
   actions.append(logout, button);
   document.body.append(actions, modal);
   updateLogoutVisibility();
+  refreshAdminNavigation();
   ensureAdminSession().then((session) => {
     updateLogoutVisibility();
+    refreshAdminNavigation();
     if (session?.isAdmin) {
       renderInlineAdminTools();
       renderUserPage();
