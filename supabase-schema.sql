@@ -127,19 +127,20 @@ begin
     raise exception 'Invalid participant name';
   end if;
 
-  if old_clean = new_clean then
+  if lower(old_clean) = lower(new_clean) then
     insert into public.participants (participant_name)
     values (new_clean)
     on conflict (participant_name) do nothing;
     return;
   end if;
 
-  if exists (select 1 from public.participants where participant_name = new_clean) then
-    delete from public.participants where participant_name = old_clean;
+  if exists (select 1 from public.participants where lower(trim(participant_name)) = lower(new_clean)) then
+    delete from public.participants
+    where lower(trim(participant_name)) = lower(old_clean);
   else
     update public.participants
     set participant_name = new_clean
-    where participant_name = old_clean;
+    where lower(trim(participant_name)) = lower(old_clean);
 
     if not found then
       insert into public.participants (participant_name)
@@ -148,24 +149,26 @@ begin
     end if;
   end if;
 
-  if exists (select 1 from public.poll_availability_answers where participant_name = new_clean) then
-    delete from public.poll_availability_answers where participant_name = old_clean;
+  if exists (select 1 from public.poll_availability_answers where lower(trim(participant_name)) = lower(new_clean)) then
+    delete from public.poll_availability_answers
+    where lower(trim(participant_name)) = lower(old_clean);
   else
     update public.poll_availability_answers
     set participant_name = new_clean
-    where participant_name = old_clean;
+    where lower(trim(participant_name)) = lower(old_clean);
   end if;
 
   update public.poll_game_suggestions
   set participant_name = new_clean
-  where participant_name = old_clean;
+  where lower(trim(participant_name)) = lower(old_clean);
 
-  if exists (select 1 from public.poll_game_votes where participant_name = new_clean) then
-    delete from public.poll_game_votes where participant_name = old_clean;
+  if exists (select 1 from public.poll_game_votes where lower(trim(participant_name)) = lower(new_clean)) then
+    delete from public.poll_game_votes
+    where lower(trim(participant_name)) = lower(old_clean);
   else
     update public.poll_game_votes
     set participant_name = new_clean
-    where participant_name = old_clean;
+    where lower(trim(participant_name)) = lower(old_clean);
   end if;
 end;
 $$;
@@ -191,10 +194,10 @@ begin
     raise exception 'Invalid participant name';
   end if;
 
-  delete from public.participants where participant_name = cleaned_name;
-  delete from public.poll_availability_answers where participant_name = cleaned_name;
-  delete from public.poll_game_suggestions where participant_name = cleaned_name;
-  delete from public.poll_game_votes where participant_name = cleaned_name;
+  delete from public.participants where lower(trim(participant_name)) = lower(cleaned_name);
+  delete from public.poll_availability_answers where lower(trim(participant_name)) = lower(cleaned_name);
+  delete from public.poll_game_suggestions where lower(trim(participant_name)) = lower(cleaned_name);
+  delete from public.poll_game_votes where lower(trim(participant_name)) = lower(cleaned_name);
 end;
 $$;
 

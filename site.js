@@ -38,6 +38,7 @@ const adminStore = {};
 const remoteStore = {};
 const pendingRemoteWrites = [];
 let remotePollDataLoaded = false;
+let adminSessionValidated = false;
 const clientStorageKeys = new Set(["adminSession", "pollParticipantName"]);
 const defaultSupabaseConfig = {
   url: "https://brizdcpbzqqrkxunfiwl.supabase.co",
@@ -129,6 +130,7 @@ function setSavedAdminSession(session) {
 }
 
 function clearAdminSession() {
+  adminSessionValidated = false;
   setSavedAdminSession(null);
   document.dispatchEvent(new CustomEvent("admin-state-change"));
 }
@@ -179,7 +181,11 @@ function getClientJson(key, fallback) {
   if (!clientStorageKeys.has(key)) return fallback;
 
   try {
-    const storedValue = globalThis.localStorage?.getItem(key);
+    if (key === "adminSession") {
+      globalThis.localStorage?.removeItem(key);
+    }
+    const storage = key === "adminSession" ? globalThis.sessionStorage : globalThis.localStorage;
+    const storedValue = storage?.getItem(key);
     return storedValue ? JSON.parse(storedValue) : fallback;
   } catch {
     return fallback;
@@ -190,7 +196,11 @@ function setClientJson(key, value) {
   if (!clientStorageKeys.has(key)) return;
 
   try {
-    globalThis.localStorage?.setItem(key, JSON.stringify(value));
+    if (key === "adminSession") {
+      globalThis.localStorage?.removeItem(key);
+    }
+    const storage = key === "adminSession" ? globalThis.sessionStorage : globalThis.localStorage;
+    storage?.setItem(key, JSON.stringify(value));
   } catch {
   }
 }
@@ -200,6 +210,7 @@ function removeClientJson(key) {
 
   try {
     globalThis.localStorage?.removeItem(key);
+    globalThis.sessionStorage?.removeItem(key);
   } catch {
   }
 }
@@ -244,6 +255,7 @@ async function refreshAdminSession() {
     if (!nextSession) throw new Error("Session ungültig");
     nextSession.isAdmin = await hasAdminAccess(nextSession.accessToken);
     if (!nextSession.isAdmin) throw new Error("Kein Admin-Zugang");
+    adminSessionValidated = true;
     setSavedAdminSession(nextSession);
     document.dispatchEvent(new CustomEvent("admin-state-change"));
     return nextSession;
@@ -253,11 +265,29 @@ async function refreshAdminSession() {
   }
 }
 
+async function validateAdminSession(session) {
+  if (!session?.accessToken) return null;
+  const isAdmin = await hasAdminAccess(session.accessToken);
+  if (!isAdmin) {
+    clearAdminSession();
+    return null;
+  }
+
+  adminSessionValidated = true;
+  const nextSession = { ...session, isAdmin: true };
+  setSavedAdminSession(nextSession);
+  document.dispatchEvent(new CustomEvent("admin-state-change"));
+  return nextSession;
+}
+
 async function ensureAdminSession() {
   const session = getSavedAdminSession();
   if (!session) return null;
 
-  if (session.expiresAt > Date.now() + 30 * 1000) return session;
+  if (session.expiresAt > Date.now() + 30 * 1000) {
+    if (!adminSessionValidated || !session.isAdmin) return validateAdminSession(session);
+    return session;
+  }
   return refreshAdminSession();
 }
 
@@ -291,6 +321,7 @@ async function signInAdmin(loginName, password) {
       clearAdminSession();
       return { session: null, error: "Dieser Account hat keinen Admin-Zugang." };
     }
+    adminSessionValidated = true;
     setSavedAdminSession(session);
     document.dispatchEvent(new CustomEvent("admin-state-change"));
     return { session, error: "" };
@@ -989,12 +1020,9 @@ function syncParticipantCard() {
   const savedName = getSavedParticipantName();
 
   if (savedName) {
-    saveRemoteParticipantEntry(savedName);
     closeParticipantDialog();
     return;
   }
-
-  openParticipantDialog();
 }
 
 function ensureParticipantName() {
@@ -1233,7 +1261,7 @@ function renderAvailabilityPoll(config) {
     return;
   }
 
-  submitButton.disabled = !participantName;
+  submitButton.disabled = false;
   availabilityOptions.style.setProperty("--availability-columns", dates.length);
   availabilityOptions.append(createAvailabilityMatrix(
     dates,
@@ -1247,7 +1275,7 @@ function renderSuggestionPoll(config) {
   if (!suggestionPoll) return;
   suggestionPoll.hidden = !config.published;
   renderPollInfo(suggestionInfo, config.info);
-  suggestionForm?.querySelector("button")?.toggleAttribute("disabled", !getParticipantName());
+  suggestionForm?.querySelector("button")?.toggleAttribute("disabled", false);
   if (config.published) {
     renderPollResultButtonInSection(suggestionPoll, "Game Vorschläge", createSuggestionResults);
   }
@@ -1310,7 +1338,7 @@ function renderGameVotePoll(config) {
     return;
   }
 
-  submitButton.disabled = !participantName;
+  submitButton.disabled = false;
   gameVoteOptions.append(...groups.map((group) => createGameVoteGroup(group, savedAnswers)));
 }
 
@@ -1601,7 +1629,7 @@ function renderPollResultButtonInSection(section, titleText, createResults) {
 }
 
 function isAdminLoggedIn() {
-  return Boolean(getSavedAdminSession()?.isAdmin);
+  return adminSessionValidated && Boolean(getSavedAdminSession()?.isAdmin);
 }
 
 function refreshAdminNavigation() {
@@ -1728,7 +1756,13 @@ async function waitForRemoteWrites() {
   ]);
 
   if (results === "timeout") return false;
-  return results.every((result) => result !== null);
+  return results.every(isRemoteWriteResultOk);
+}
+
+function isRemoteWriteResultOk(result) {
+  if (result === null) return false;
+  if (Array.isArray(result)) return result.every(isRemoteWriteResultOk);
+  return true;
 }
 
 async function refreshAfterAdminSave(status, message) {
@@ -2035,6 +2069,7 @@ function createUserAdmin(participants = []) {
   status.className = "form-status";
   const addName = createAdminInput("text");
   const addButton = createActionButton("User hinzufügen", "admin-secondary-button");
+  const clearAllButton = createActionButton("Alle User löschen", "admin-remove-button");
   const listTitle = document.createElement("h4");
   listTitle.textContent = "Teilnehmer";
   const knownParticipants = getKnownParticipants(participants);
@@ -2047,6 +2082,20 @@ function createUserAdmin(participants = []) {
     }
     queueRemoteWrite(saveRemoteParticipantEntry(nextName));
     refreshAfterAdminSave(status, "User hinzugefügt.");
+  });
+
+  clearAllButton.addEventListener("click", () => {
+    if (!knownParticipants.length) {
+      status.textContent = "Keine User zum Löschen vorhanden.";
+      return;
+    }
+    if (!globalThis.confirm?.("Wirklich alle User löschen? Alle Poll-Antworten dieser User werden mitgelöscht.")) return;
+    const savedNameKey = getParticipantKey(getSavedParticipantName());
+    if (knownParticipants.some((entry) => getParticipantKey(entry.name) === savedNameKey)) {
+      setSavedParticipantName("");
+    }
+    queueRemoteWrite(Promise.all(knownParticipants.map((entry) => deleteRemoteParticipantEntry(entry.name))));
+    refreshAfterAdminSave(status, "Alle User gelöscht.");
   });
 
   const entries = createAdminList(
@@ -2076,6 +2125,9 @@ function createUserAdmin(participants = []) {
 
       remove.addEventListener("click", () => {
         if (!globalThis.confirm?.(`User "${entry.name}" wirklich löschen? Alle Poll-Antworten dieses Users werden mitgelöscht.`)) return;
+        if (getParticipantKey(getSavedParticipantName()) === getParticipantKey(entry.name)) {
+          setSavedParticipantName("");
+        }
         queueRemoteWrite(deleteRemoteParticipantEntry(entry.name));
         refreshAfterAdminSave(status, "User gelöscht.");
       });
@@ -2091,6 +2143,7 @@ function createUserAdmin(participants = []) {
   form.append(
     createAdminField("Neuer User", addName),
     addButton,
+    clearAllButton,
     listTitle,
     entries,
     status
