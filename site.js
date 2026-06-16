@@ -24,8 +24,6 @@ const gameVoteOptions = document.querySelector("#game-vote-options");
 const gameVoteStatus = document.querySelector("#game-vote-status");
 let participantChip = document.querySelector("#participant-chip");
 let participantCurrentName = document.querySelector("#participant-current-name");
-let participantEditButton = document.querySelector("#participant-edit");
-let participantDeleteButton = document.querySelector("#participant-delete");
 let participantDialog = document.querySelector("#participant-dialog");
 let participantForm = document.querySelector("#participant-form");
 let participantCloseButton = document.querySelector("#participant-close");
@@ -76,6 +74,26 @@ function getSupabaseProjectUrl() {
   return supabaseConfig.url
     .replace(/\/rest\/v1\/?$/i, "")
     .replace(/\/$/, "");
+}
+
+function normalizeAdminName(value) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "")
+    .replace(/\.{2,}/g, ".");
+}
+
+function getAdminLoginEmail(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("@")) return trimmed.toLowerCase();
+
+  const normalizedName = normalizeAdminName(trimmed);
+  return normalizedName ? `${normalizedName}@patalympics.admin` : "";
 }
 
 function getSavedAdminSession() {
@@ -222,8 +240,10 @@ async function ensureAdminSession() {
   return refreshAdminSession();
 }
 
-async function signInAdmin(email, password) {
+async function signInAdmin(loginName, password) {
   if (!supabaseEnabled) return { session: null, error: "Supabase ist nicht aktiv." };
+  const email = getAdminLoginEmail(loginName);
+  if (!email) return { session: null, error: "Bitte einen Admin-Namen eingeben." };
 
   try {
     const response = await fetch(`${getSupabaseProjectUrl()}/auth/v1/token?grant_type=password`, {
@@ -409,6 +429,30 @@ function deleteRemoteSuggestionEntry(id) {
 
 function deleteRemoteGameVoteEntry(name) {
   return deleteRemoteRows(`poll_game_votes?participant_name=eq.${encodeURIComponent(name)}`);
+}
+
+async function loadRemoteParticipants() {
+  const result = await supabaseFetch("participants?select=id,participant_name,created_at&order=created_at.asc");
+  if (!Array.isArray(result)) return [];
+  return result.map((entry) => ({
+    id: entry.id,
+    name: entry.participant_name,
+    createdAt: entry.created_at ?? "",
+  }));
+}
+
+function saveRemoteParticipantEntry(name) {
+  return supabaseFetch("participants?on_conflict=participant_name", {
+    method: "POST",
+    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body: JSON.stringify({
+      participant_name: name,
+    }),
+  });
+}
+
+function deleteRemoteParticipantEntry(name) {
+  return deleteRemoteRows(`participants?participant_name=eq.${encodeURIComponent(name)}`);
 }
 
 function formatDate(value) {
@@ -861,8 +905,6 @@ function getParticipantName() {
 function refreshParticipantElements() {
   participantChip = document.querySelector("#participant-chip");
   participantCurrentName = document.querySelector("#participant-current-name");
-  participantEditButton = document.querySelector("#participant-edit");
-  participantDeleteButton = document.querySelector("#participant-delete");
   participantDialog = document.querySelector("#participant-dialog");
   participantForm = document.querySelector("#participant-form");
   participantCloseButton = document.querySelector("#participant-close");
@@ -945,6 +987,7 @@ async function submitParticipantName() {
   }
 
   setSavedParticipantName(name);
+  queueRemoteWrite(saveRemoteParticipantEntry(name));
   syncParticipantCard();
   renderParticipantCardStatus("Name gespeichert.");
   await loadPolls();
@@ -1287,22 +1330,6 @@ function initParticipantUi() {
     await submitParticipantName();
   });
 
-  participantEditButton?.addEventListener("click", () => {
-    renderParticipantCardStatus("");
-    openParticipantDialog(getSavedParticipantName());
-  });
-
-  participantDeleteButton?.addEventListener("click", async () => {
-    setSavedParticipantName("");
-    availabilityStatus.textContent = "";
-    suggestionStatus.textContent = "";
-    gameVoteStatus.textContent = "";
-    if (availabilityNote) availabilityNote.value = "";
-    syncParticipantCard();
-    renderParticipantCardStatus("Name geloescht.");
-    await loadPolls();
-  });
-
   participantCloseButton?.addEventListener("click", () => {
     if (getSavedParticipantName()) {
       closeParticipantDialog();
@@ -1599,6 +1626,7 @@ async function getAdminData() {
     calendar: await loadLocalData("adminCalendarData", initialSiteData.calendar),
     polls: await loadLocalData("adminPollData", initialSiteData.polls),
     ranking: await loadLocalData("adminRankingData", initialSiteData.ranking),
+    participants: await loadRemoteParticipants(),
   };
 }
 
@@ -1630,13 +1658,13 @@ function renderAdminLogin(modalBody) {
 
   const form = document.createElement("form");
   form.className = "admin-form";
-  const email = createAdminInput("email");
+  const loginName = createAdminInput("text");
   const password = createAdminInput("password");
   const status = document.createElement("p");
   status.className = "form-status";
 
   form.append(
-    createAdminField("Admin E-Mail", email),
+    createAdminField("Admin-Name", loginName),
     createAdminField("Admin Passwort", password),
     createAdminButton("Einloggen"),
     status
@@ -1645,7 +1673,7 @@ function renderAdminLogin(modalBody) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     status.textContent = "Prüfe Login...";
-    const result = await signInAdmin(email.value.trim(), password.value);
+    const result = await signInAdmin(loginName.value.trim(), password.value);
 
     if (!result.session) {
       status.textContent = result.error;
@@ -1694,7 +1722,7 @@ async function renderAdminPanel(modalBody) {
   wrap.append(
     renderAdminSection("News", createNewsAdmin(data.news)),
     renderAdminSection("Kalender", createCalendarAdmin(data.calendar)),
-    renderAdminSection("Polls", createPollAdmin(data.polls)),
+    renderAdminSection("Polls", createPollAdmin(data.polls, data.participants)),
     renderAdminSection("Rangliste", createRankingAdmin(data.ranking))
   );
 
@@ -1721,7 +1749,7 @@ function getInlineAdminConfig(data) {
   if (path.endsWith("/poll.html")) {
     return {
       title: "Polls bearbeiten",
-      content: createPollAdmin(data.polls),
+      content: createPollAdmin(data.polls, data.participants),
     };
   }
 
@@ -1888,7 +1916,7 @@ function createCalendarAdmin(events) {
   return form;
 }
 
-function createPollAdmin(polls) {
+function createPollAdmin(polls, participants = []) {
   const form = document.createElement("form");
   form.className = "admin-form poll-admin-form";
   const status = document.createElement("p");
@@ -1968,6 +1996,25 @@ function createPollAdmin(polls) {
   const availabilityEntries = getAvailabilityEntries();
   const suggestionEntries = getSuggestionEntries();
   const gameVoteEntries = getGameVoteEntries();
+
+  const participantDataTitle = document.createElement("h4");
+  participantDataTitle.textContent = "Teilnehmer";
+  const participantDataList = createAdminList(
+    participants.map((entry) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        queueRemoteWrite(deleteRemoteParticipantEntry(entry.name));
+        refreshAfterAdminSave(status, "Teilnehmer gelöscht.");
+      });
+      return createAdminEntry(
+        entry.name,
+        entry.createdAt ? `Registriert: ${formatDate(entry.createdAt)}` : "",
+        remove
+      );
+    }),
+    "Noch keine Teilnehmer registriert."
+  );
+  availability.append(participantDataTitle, participantDataList);
 
   const availabilityDataTitle = document.createElement("h4");
   availabilityDataTitle.textContent = "Antworten";

@@ -36,23 +36,30 @@ Dadurch entstehen Tabellen für:
 
 ## 3. Admin anlegen
 
-Für den Admin-Zugang brauchst du jetzt einen echten Supabase-User.
+Für den Admin-Zugang brauchst du einen echten Supabase-User.
+Auf der Website meldest du dich später aber nur mit `Admin-Name + Passwort` an.
 
 In Supabase:
 
 1. `Authentication` öffnen.
-2. Unter `Users` einen User mit E-Mail und Passwort anlegen.
-3. Die `id` dieses Users kopieren.
-4. Im `SQL Editor` diesen Befehl ausführen:
+2. Einen einfachen Admin-Namen festlegen, zum Beispiel `pat`.
+3. Unter `Users` einen User mit dieser internen E-Mail und einem Passwort anlegen:
+
+```txt
+pat@patalympics.admin
+```
+
+4. Die `id` dieses Users kopieren.
+5. Im `SQL Editor` diesen Befehl ausführen:
 
 ```sql
 insert into public.admin_users (user_id, email)
-values ('DEINE-USER-ID', 'deine-mail@example.com')
+values ('DEINE-USER-ID', 'pat@patalympics.admin')
 on conflict (user_id) do update
 set email = excluded.email;
 ```
 
-Danach kann sich genau dieser User über den Admin-Login auf der Website anmelden.
+Danach kannst du dich auf der Website einfach mit `pat` und deinem Passwort einloggen.
 
 ## 4. Supabase Zugangsdaten
 
