@@ -978,6 +978,34 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.participant-admin-row {
+  align-items: center;
+}
+
+.participant-admin-editor {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.participant-admin-editor p {
+  margin: 0;
+  color: rgba(255, 250, 241, 0.58);
+  font-size: 0.74rem;
+}
+
+.participant-admin-name {
+  min-height: 34px;
+}
+
+.participant-admin-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .admin-form h4 {
   margin: 4px 0 0;
   color: var(--sand);

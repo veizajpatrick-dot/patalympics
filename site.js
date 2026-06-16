@@ -96,6 +96,27 @@ function getAdminLoginEmail(value) {
   return normalizedName ? `${normalizedName}@patalympics.admin` : "";
 }
 
+async function resolveAdminLoginEmail(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("@") || !supabaseEnabled) return getAdminLoginEmail(trimmed);
+
+  try {
+    const response = await fetch(`${getSupabaseProjectUrl()}/rest/v1/rpc/resolve_admin_login`, {
+      method: "POST",
+      headers: getSupabaseHeaders(supabaseConfig.anonKey),
+      body: JSON.stringify({ login_value: trimmed }),
+    });
+    const resolvedEmail = await response.json().catch(() => "");
+    if (response.ok && typeof resolvedEmail === "string" && resolvedEmail.includes("@")) {
+      return resolvedEmail.toLowerCase();
+    }
+  } catch {
+  }
+
+  return getAdminLoginEmail(trimmed);
+}
+
 function getSavedAdminSession() {
   return getClientJson("adminSession", null);
 }
@@ -242,7 +263,7 @@ async function ensureAdminSession() {
 
 async function signInAdmin(loginName, password) {
   if (!supabaseEnabled) return { session: null, error: "Supabase ist nicht aktiv." };
-  const email = getAdminLoginEmail(loginName);
+  const email = await resolveAdminLoginEmail(loginName);
   if (!email) return { session: null, error: "Bitte einen Admin-Namen eingeben." };
 
   try {
@@ -298,8 +319,9 @@ async function supabaseFetch(path, options = {}) {
     });
 
     if (!response.ok) throw new Error(`Supabase ${response.status}`);
-    if (response.status === 204) return null;
-    return response.json();
+    if (response.status === 204) return true;
+    const text = await response.text();
+    return text ? JSON.parse(text) : true;
   } catch {
     return null;
   }
@@ -453,6 +475,23 @@ function saveRemoteParticipantEntry(name) {
 
 function deleteRemoteParticipantEntry(name) {
   return deleteRemoteRows(`participants?participant_name=eq.${encodeURIComponent(name)}`);
+}
+
+function updateRemoteParticipantName(oldName, newName) {
+  const encodedName = encodeURIComponent(oldName);
+  const body = JSON.stringify({ participant_name: newName });
+  const options = {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body,
+  };
+
+  return Promise.all([
+    supabaseFetch(`participants?participant_name=eq.${encodedName}`, options),
+    supabaseFetch(`poll_availability_answers?participant_name=eq.${encodedName}`, options),
+    supabaseFetch(`poll_game_votes?participant_name=eq.${encodedName}`, options),
+    supabaseFetch(`poll_game_suggestions?participant_name=eq.${encodedName}`, options),
+  ]);
 }
 
 function formatDate(value) {
@@ -2001,16 +2040,32 @@ function createPollAdmin(polls, participants = []) {
   participantDataTitle.textContent = "Teilnehmer";
   const participantDataList = createAdminList(
     participants.map((entry) => {
+      const row = document.createElement("div");
+      row.className = "admin-list-row participant-admin-row";
+      const editor = document.createElement("div");
+      editor.className = "participant-admin-editor";
+      const name = createAdminInput("text", entry.name);
+      name.className = "participant-admin-name";
+      const meta = document.createElement("p");
+      meta.textContent = entry.createdAt ? `Registriert: ${formatDate(entry.createdAt)}` : "";
+      const actions = document.createElement("div");
+      actions.className = "participant-admin-actions";
+      const save = createActionButton("Speichern", "admin-secondary-button");
       const remove = createActionButton("Löschen", "admin-remove-button");
+      save.addEventListener("click", () => {
+        const nextName = name.value.trim();
+        if (!nextName || getParticipantKey(nextName) === getParticipantKey(entry.name)) return;
+        queueRemoteWrite(updateRemoteParticipantName(entry.name, nextName));
+        refreshAfterAdminSave(status, "Teilnehmer gespeichert.");
+      });
       remove.addEventListener("click", () => {
         queueRemoteWrite(deleteRemoteParticipantEntry(entry.name));
         refreshAfterAdminSave(status, "Teilnehmer gelöscht.");
       });
-      return createAdminEntry(
-        entry.name,
-        entry.createdAt ? `Registriert: ${formatDate(entry.createdAt)}` : "",
-        remove
-      );
+      editor.append(name, meta);
+      actions.append(save, remove);
+      row.append(editor, actions);
+      return row;
     }),
     "Noch keine Teilnehmer registriert."
   );

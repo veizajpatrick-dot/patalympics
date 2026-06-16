@@ -53,13 +53,24 @@ pat@patalympics.admin
 5. Im `SQL Editor` diesen Befehl ausführen:
 
 ```sql
-insert into public.admin_users (user_id, email)
-values ('DEINE-USER-ID', 'pat@patalympics.admin')
+insert into public.admin_users (user_id, email, login_name)
+values ('DEINE-USER-ID', 'pat@patalympics.admin', 'pat')
 on conflict (user_id) do update
-set email = excluded.email;
+set email = excluded.email,
+    login_name = excluded.login_name;
 ```
 
 Danach kannst du dich auf der Website einfach mit `pat` und deinem Passwort einloggen.
+
+Wenn du einen echten Supabase-User mit normaler E-Mail nutzt, kannst du trotzdem einen kurzen Login-Namen setzen:
+
+```sql
+insert into public.admin_users (user_id, email, login_name)
+values ('DEINE-USER-ID', 'deine-email@example.com', 'pat')
+on conflict (user_id) do update
+set email = excluded.email,
+    login_name = excluded.login_name;
+```
 
 ## 4. Supabase Zugangsdaten
 
