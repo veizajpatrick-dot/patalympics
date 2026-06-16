@@ -531,6 +531,74 @@ h1 {
   font-size: 0.9rem;
 }
 
+.participant-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-color: rgba(245, 191, 105, 0.26);
+}
+
+.participant-chip-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.participant-chip-copy span {
+  color: rgba(255, 250, 241, 0.58);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.participant-chip-copy strong {
+  color: var(--sand);
+  font-size: 0.96rem;
+}
+
+.participant-chip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.participant-dialog {
+  width: min(420px, calc(100vw - 28px));
+  padding: 0;
+  border: 1px solid rgba(255, 250, 241, 0.2);
+  color: var(--white);
+  background:
+    linear-gradient(180deg, rgba(32, 16, 51, 0.98), rgba(10, 7, 16, 0.98)),
+    var(--ink);
+}
+
+.participant-dialog::backdrop {
+  background: rgba(5, 3, 10, 0.78);
+}
+
+.participant-dialog-form {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.participant-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.participant-dialog-head h2 {
+  margin: 0;
+  color: var(--sand);
+  font-size: 0.92rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .poll-answer-form {
   display: grid;
   gap: 12px;
@@ -762,6 +830,10 @@ h1 {
   font-weight: 800;
 }
 
+.form-status[data-state="error"] {
+  color: #f17873;
+}
+
 .admin-floating-actions {
   position: fixed;
   right: 18px;
@@ -876,6 +948,48 @@ h1 {
 .admin-check-list {
   display: grid;
   gap: 10px;
+}
+
+.admin-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-list-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  background: rgba(18, 11, 29, 0.34);
+}
+
+.admin-list-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-list-copy strong {
+  color: var(--white);
+  font-size: 0.83rem;
+}
+
+.admin-list-copy p,
+.admin-list-empty {
+  margin: 0;
+  color: rgba(255, 250, 241, 0.62);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-form h4 {
+  margin: 4px 0 0;
+  color: var(--sand);
+  font-size: 0.76rem;
+  text-transform: uppercase;
 }
 
 .poll-admin-form {
@@ -1020,8 +1134,7 @@ h1 {
 }
 
 .poll-result-box h4,
-.poll-result-group h5,
-.poll-result-label {
+.poll-result-group h5 {
   margin: 0;
   color: var(--sand);
   font-size: 0.72rem;
@@ -1029,7 +1142,6 @@ h1 {
   text-transform: uppercase;
 }
 
-.poll-result-grid,
 .poll-result-group {
   display: grid;
   gap: 5px;
@@ -1206,6 +1318,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -1223,6 +1336,20 @@ h1 {
 }
 
 @media (max-width: 760px) {
+  .participant-chip {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .participant-chip-actions {
+    justify-content: stretch;
+  }
+
+  .participant-chip-actions button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
   .admin-grid {
     grid-template-columns: 1fr;
   }

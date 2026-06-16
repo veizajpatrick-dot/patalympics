@@ -12,19 +12,27 @@ const availabilityInfo = document.querySelector("#availability-info");
 const availabilityForm = document.querySelector("#availability-form");
 const availabilityOptions = document.querySelector("#availability-options");
 const availabilityNote = document.querySelector("#availability-note");
-const availabilityName = document.querySelector("#availability-name");
 const availabilityStatus = document.querySelector("#availability-status");
 const suggestionPoll = document.querySelector("#suggestion-poll");
 const suggestionInfo = document.querySelector("#suggestion-info");
 const suggestionForm = document.querySelector("#suggestion-form");
-const suggestionName = document.querySelector("#suggestion-name");
 const suggestionStatus = document.querySelector("#suggestion-status");
 const gameVotePoll = document.querySelector("#game-vote-poll");
 const gameVoteInfo = document.querySelector("#game-vote-info");
 const gameVoteForm = document.querySelector("#game-vote-form");
 const gameVoteOptions = document.querySelector("#game-vote-options");
-const gameVoteName = document.querySelector("#game-vote-name");
 const gameVoteStatus = document.querySelector("#game-vote-status");
+let participantChip = document.querySelector("#participant-chip");
+let participantCurrentName = document.querySelector("#participant-current-name");
+let participantEditButton = document.querySelector("#participant-edit");
+let participantDeleteButton = document.querySelector("#participant-delete");
+let participantDialog = document.querySelector("#participant-dialog");
+let participantForm = document.querySelector("#participant-form");
+let participantCloseButton = document.querySelector("#participant-close");
+let participantNameInput = document.querySelector("#participant-name");
+let participantSaveButton = document.querySelector("#participant-save");
+let participantStatus = document.querySelector("#participant-status");
+let participantUiInitialized = false;
 
 let visibleMonth = new Date();
 visibleMonth.setDate(1);
@@ -33,15 +41,13 @@ const adminStore = {};
 const remoteStore = {};
 const pendingRemoteWrites = [];
 let remotePollDataLoaded = false;
+const clientStorageKeys = new Set(["adminSession", "pollParticipantName"]);
 const defaultSupabaseConfig = {
   url: "https://brizdcpbzqqrkxunfiwl.supabase.co",
   anonKey: "sb_publishable_108t7jwS4__1lsxyac2kKw_7Tnb-6bZ",
 };
 const supabaseConfig = globalThis.PATALYMPICS_SUPABASE ?? defaultSupabaseConfig;
 const supabaseEnabled = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
-if (supabaseEnabled) {
-  console.info("Patalympics: Supabase aktiv.");
-}
 const initialSiteData = {
   news: [],
   calendar: [],
@@ -66,29 +72,103 @@ const initialSiteData = {
   },
 };
 
+function getSupabaseProjectUrl() {
+  return supabaseConfig.url
+    .replace(/\/rest\/v1\/?$/i, "")
+    .replace(/\/$/, "");
+}
+
+function getSavedAdminSession() {
+  return getClientJson("adminSession", null);
+}
+
+function setSavedAdminSession(session) {
+  if (session) {
+    setClientJson("adminSession", session);
+  } else {
+    removeClientJson("adminSession");
+  }
+}
+
+function clearAdminSession() {
+  setSavedAdminSession(null);
+  document.dispatchEvent(new CustomEvent("admin-state-change"));
+}
+
+function mapAuthSession(payload) {
+  if (!payload?.access_token || !payload?.refresh_token) return null;
+
+  return {
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token,
+    expiresAt: Date.now() + Number(payload.expires_in ?? 0) * 1000,
+    user: {
+      id: payload.user?.id ?? "",
+      email: payload.user?.email ?? "",
+    },
+    isAdmin: false,
+  };
+}
+
+async function hasAdminAccess(token) {
+  if (!supabaseEnabled || !token) return false;
+
+  try {
+    const response = await fetch(`${getSupabaseProjectUrl()}/rest/v1/admin_users?select=user_id&limit=1`, {
+      headers: getSupabaseHeaders(token),
+    });
+    if (!response.ok) return false;
+    const rows = await response.json();
+    return Array.isArray(rows) && rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function getStoredJson(key, fallback) {
   try {
     if (Object.prototype.hasOwnProperty.call(remoteStore, key)) {
       return remoteStore[key] ?? fallback;
     }
-    const storedValue = globalThis.localStorage?.getItem(key) ?? adminStore[key];
+    const storedValue = adminStore[key];
     return JSON.parse(storedValue) ?? fallback;
   } catch {
     return fallback;
   }
 }
 
+function getClientJson(key, fallback) {
+  if (!clientStorageKeys.has(key)) return fallback;
+
+  try {
+    const storedValue = globalThis.localStorage?.getItem(key);
+    return storedValue ? JSON.parse(storedValue) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function setClientJson(key, value) {
+  if (!clientStorageKeys.has(key)) return;
+
+  try {
+    globalThis.localStorage?.setItem(key, JSON.stringify(value));
+  } catch {
+  }
+}
+
+function removeClientJson(key) {
+  if (!clientStorageKeys.has(key)) return;
+
+  try {
+    globalThis.localStorage?.removeItem(key);
+  } catch {
+  }
+}
+
 function setStoredJson(key, value) {
   const serializedValue = JSON.stringify(value);
   remoteStore[key] = value;
-
-  try {
-    if (globalThis.localStorage) {
-      globalThis.localStorage.setItem(key, serializedValue);
-    }
-  } catch {
-  }
-
   adminStore[key] = serializedValue;
   syncRemoteData(key, value);
 }
@@ -105,10 +185,83 @@ async function loadLocalData(storeKey, fallback) {
   return JSON.parse(JSON.stringify(fallback));
 }
 
-function getSupabaseHeaders(extra = {}) {
+async function refreshAdminSession() {
+  const session = getSavedAdminSession();
+  if (!supabaseEnabled || !session?.refreshToken) return null;
+
+  try {
+    const response = await fetch(`${getSupabaseProjectUrl()}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseConfig.anonKey,
+        Authorization: `Bearer ${supabaseConfig.anonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: session.refreshToken }),
+    });
+
+    if (!response.ok) throw new Error(`Supabase auth ${response.status}`);
+    const payload = await response.json();
+    const nextSession = mapAuthSession(payload);
+    if (!nextSession) throw new Error("Session ungültig");
+    nextSession.isAdmin = await hasAdminAccess(nextSession.accessToken);
+    if (!nextSession.isAdmin) throw new Error("Kein Admin-Zugang");
+    setSavedAdminSession(nextSession);
+    return nextSession;
+  } catch {
+    clearAdminSession();
+    return null;
+  }
+}
+
+async function ensureAdminSession() {
+  const session = getSavedAdminSession();
+  if (!session) return null;
+
+  if (session.expiresAt > Date.now() + 30 * 1000) return session;
+  return refreshAdminSession();
+}
+
+async function signInAdmin(email, password) {
+  if (!supabaseEnabled) return { session: null, error: "Supabase ist nicht aktiv." };
+
+  try {
+    const response = await fetch(`${getSupabaseProjectUrl()}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseConfig.anonKey,
+        Authorization: `Bearer ${supabaseConfig.anonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { session: null, error: payload.msg || payload.error_description || "Login fehlgeschlagen." };
+    }
+
+    const session = mapAuthSession(payload);
+    if (!session) {
+      return { session: null, error: "Session konnte nicht gelesen werden." };
+    }
+    session.isAdmin = await hasAdminAccess(session.accessToken);
+    if (!session.isAdmin) {
+      clearAdminSession();
+      return { session: null, error: "Dieser Account hat keinen Admin-Zugang." };
+    }
+    setSavedAdminSession(session);
+    document.dispatchEvent(new CustomEvent("admin-state-change"));
+    return { session, error: "" };
+  } catch {
+    return { session: null, error: "Login konnte nicht aufgebaut werden." };
+  }
+}
+
+function getSupabaseHeaders(token, extra = {}) {
   return {
     apikey: supabaseConfig.anonKey,
-    Authorization: `Bearer ${supabaseConfig.anonKey}`,
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     ...extra,
   };
@@ -118,10 +271,10 @@ async function supabaseFetch(path, options = {}) {
   if (!supabaseEnabled) return null;
 
   try {
-    const baseUrl = supabaseConfig.url.replace(/\/$/, "");
-    const response = await fetch(`${baseUrl}/rest/v1/${path}`, {
+    const token = (await ensureAdminSession())?.accessToken ?? supabaseConfig.anonKey;
+    const response = await fetch(`${getSupabaseProjectUrl()}/rest/v1/${path}`, {
       ...options,
-      headers: getSupabaseHeaders(options.headers),
+      headers: getSupabaseHeaders(token, options.headers),
     });
 
     if (!response.ok) throw new Error(`Supabase ${response.status}`);
@@ -145,11 +298,23 @@ function saveRemoteSiteContent(key, value) {
   });
 }
 
+function deleteRemoteRows(path) {
+  return supabaseFetch(path, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
+function queueRemoteWrite(request) {
+  if (request?.then) pendingRemoteWrites.push(request);
+  return request;
+}
+
 function syncRemoteData(key, value) {
   if (!supabaseEnabled) return;
 
   if (key.startsWith("admin")) {
-    pendingRemoteWrites.push(saveRemoteSiteContent(key, value));
+    queueRemoteWrite(saveRemoteSiteContent(key, value));
   }
 }
 
@@ -157,14 +322,15 @@ async function loadRemotePollData() {
   if (!supabaseEnabled || remotePollDataLoaded) return;
 
   const [availability, suggestions, votes] = await Promise.all([
-    supabaseFetch("poll_availability_answers?select=participant_name,answers,note,updated_at"),
+    supabaseFetch("poll_availability_answers?select=id,participant_name,answers,note,updated_at"),
     supabaseFetch("poll_game_suggestions?select=id,participant_name,suggestion,created_at&order=created_at.asc"),
-    supabaseFetch("poll_game_votes?select=participant_name,answers,updated_at"),
+    supabaseFetch("poll_game_votes?select=id,participant_name,answers,updated_at"),
   ]);
 
   if (Array.isArray(availability)) {
     remoteStore.pollAvailabilityAnswers = {
       participants: availability.map((entry) => ({
+        id: entry.id,
         name: entry.participant_name,
         answers: entry.answers ?? {},
         note: entry.note ?? "",
@@ -185,6 +351,7 @@ async function loadRemotePollData() {
   if (Array.isArray(votes)) {
     remoteStore.pollGameVoteAnswers = {
       participants: votes.map((entry) => ({
+        id: entry.id,
         name: entry.participant_name,
         answers: entry.answers ?? [],
         updatedAt: entry.updated_at ?? "",
@@ -230,6 +397,18 @@ function saveRemoteGameVoteEntry(entry) {
       updated_at: entry.updatedAt ?? new Date().toISOString(),
     }),
   });
+}
+
+function deleteRemoteAvailabilityEntry(name) {
+  return deleteRemoteRows(`poll_availability_answers?participant_name=eq.${encodeURIComponent(name)}`);
+}
+
+function deleteRemoteSuggestionEntry(id) {
+  return deleteRemoteRows(`poll_game_suggestions?id=eq.${encodeURIComponent(id)}`);
+}
+
+function deleteRemoteGameVoteEntry(name) {
+  return deleteRemoteRows(`poll_game_votes?participant_name=eq.${encodeURIComponent(name)}`);
 }
 
 function formatDate(value) {
@@ -656,24 +835,119 @@ function renderPollInfo(element, text) {
   element.hidden = !text?.trim();
 }
 
-function getParticipantName(input) {
-  return input?.value.trim() || "";
-}
-
 function getParticipantKey(name) {
   return name.trim().toLocaleLowerCase("de-DE");
 }
 
 function getSavedParticipantName() {
-  return getStoredJson("pollParticipantName", "");
+  return getClientJson("pollParticipantName", "");
 }
 
 function setSavedParticipantName(name) {
-  if (name) setStoredJson("pollParticipantName", name);
+  const trimmed = name.trim();
+  if (trimmed) {
+    setClientJson("pollParticipantName", trimmed);
+  } else {
+    removeClientJson("pollParticipantName");
+  }
 }
 
-function applySavedParticipantName(input) {
-  if (input && !input.value) input.value = getSavedParticipantName();
+function getParticipantName() {
+  const savedName = getSavedParticipantName();
+  if (savedName) return savedName;
+  return participantNameInput?.value.trim() || "";
+}
+
+function refreshParticipantElements() {
+  participantChip = document.querySelector("#participant-chip");
+  participantCurrentName = document.querySelector("#participant-current-name");
+  participantEditButton = document.querySelector("#participant-edit");
+  participantDeleteButton = document.querySelector("#participant-delete");
+  participantDialog = document.querySelector("#participant-dialog");
+  participantForm = document.querySelector("#participant-form");
+  participantCloseButton = document.querySelector("#participant-close");
+  participantNameInput = document.querySelector("#participant-name");
+  participantSaveButton = document.querySelector("#participant-save");
+  participantStatus = document.querySelector("#participant-status");
+}
+
+function ensureParticipantUi() {
+  if (!participantDialog) {
+    const dialog = document.createElement("dialog");
+    dialog.id = "participant-dialog";
+    dialog.className = "participant-dialog";
+    dialog.innerHTML = `
+      <form id="participant-form" class="participant-dialog-form" method="dialog">
+        <div class="participant-dialog-head">
+          <h2>Dein Name</h2>
+          <button id="participant-close" class="admin-secondary-button" type="button">Schliessen</button>
+        </div>
+        <label class="field">
+          <span>Name</span>
+          <input id="participant-name" type="text" autocomplete="name" />
+        </label>
+        <button id="participant-save" class="form-button" type="submit">Namen speichern</button>
+        <p id="participant-status" class="form-status" role="status"></p>
+      </form>
+    `;
+    document.body.append(dialog);
+  }
+
+  refreshParticipantElements();
+}
+
+function renderParticipantCardStatus(message = "", isError = false) {
+  if (!participantStatus) return;
+  participantStatus.textContent = message;
+  participantStatus.dataset.state = isError ? "error" : "success";
+}
+
+function openParticipantDialog(prefill = "") {
+  if (!participantDialog || !participantNameInput) return;
+  participantNameInput.value = prefill;
+  if (!participantDialog.open) participantDialog.showModal();
+  participantNameInput.focus();
+}
+
+function closeParticipantDialog() {
+  if (participantDialog?.open) participantDialog.close();
+}
+
+function syncParticipantCard() {
+  if (!participantNameInput) return;
+  const savedName = getSavedParticipantName();
+  if (participantChip) participantChip.hidden = !savedName;
+  if (participantCurrentName) participantCurrentName.textContent = savedName;
+
+  if (savedName) {
+    closeParticipantDialog();
+    return;
+  }
+
+  if (participantChip) participantChip.hidden = true;
+  openParticipantDialog();
+}
+
+function ensureParticipantName() {
+  const name = getParticipantName();
+  if (name) return name;
+  renderParticipantCardStatus("Bitte zuerst deinen Namen speichern.", true);
+  openParticipantDialog();
+  return "";
+}
+
+async function submitParticipantName() {
+  const name = participantNameInput?.value.trim() || "";
+  if (!name) {
+    renderParticipantCardStatus("Bitte einen Namen eintragen.", true);
+    participantNameInput?.focus();
+    return;
+  }
+
+  setSavedParticipantName(name);
+  syncParticipantCard();
+  renderParticipantCardStatus("Name gespeichert.");
+  await loadPolls();
 }
 
 function upsertParticipant(entries, nextEntry) {
@@ -709,7 +983,13 @@ function saveAvailabilityEntry(entry) {
   setStoredJson("pollAvailabilityAnswers", {
     participants: upsertParticipant(getAvailabilityEntries(), entry),
   });
-  saveRemoteAvailabilityEntry(entry);
+  queueRemoteWrite(saveRemoteAvailabilityEntry(entry));
+}
+
+function deleteAvailabilityEntry(name) {
+  const nextEntries = getAvailabilityEntries().filter((entry) => getParticipantKey(entry.name) !== getParticipantKey(name));
+  setStoredJson("pollAvailabilityAnswers", { participants: nextEntries });
+  queueRemoteWrite(deleteRemoteAvailabilityEntry(name));
 }
 
 function getSuggestionEntries() {
@@ -726,7 +1006,13 @@ function getSuggestionEntries() {
 
 function saveSuggestionEntry(entry) {
   setStoredJson("pollGameSuggestions", [...getSuggestionEntries(), entry]);
-  saveRemoteSuggestionEntry(entry);
+  queueRemoteWrite(saveRemoteSuggestionEntry(entry));
+}
+
+function deleteSuggestionEntry(id) {
+  const nextEntries = getSuggestionEntries().filter((entry) => entry.id !== id);
+  setStoredJson("pollGameSuggestions", nextEntries);
+  queueRemoteWrite(deleteRemoteSuggestionEntry(id));
 }
 
 function getGameVoteEntries() {
@@ -749,7 +1035,13 @@ function saveGameVoteEntry(entry) {
   setStoredJson("pollGameVoteAnswers", {
     participants: upsertParticipant(getGameVoteEntries(), entry),
   });
-  saveRemoteGameVoteEntry(entry);
+  queueRemoteWrite(saveRemoteGameVoteEntry(entry));
+}
+
+function deleteGameVoteEntry(name) {
+  const nextEntries = getGameVoteEntries().filter((entry) => getParticipantKey(entry.name) !== getParticipantKey(name));
+  setStoredJson("pollGameVoteAnswers", { participants: nextEntries });
+  queueRemoteWrite(deleteRemoteGameVoteEntry(name));
 }
 
 function createMatrixLabel(text, className) {
@@ -823,9 +1115,9 @@ function renderAvailabilityPoll(config) {
   if (!config.published) return;
 
   const dates = getDateRange(config.startDate, config.endDate);
+  const participantName = getParticipantName();
   renderPollInfo(availabilityInfo, config.info);
-  applySavedParticipantName(availabilityName);
-  const savedEntry = getAvailabilityEntry(getParticipantName(availabilityName));
+  const savedEntry = participantName ? getAvailabilityEntry(participantName) : null;
   const savedAnswers = savedEntry?.answers ?? {};
   const submitButton = availabilityForm.querySelector("button");
   availabilityOptions.replaceChildren();
@@ -841,7 +1133,7 @@ function renderAvailabilityPoll(config) {
     return;
   }
 
-  submitButton.disabled = false;
+  submitButton.disabled = !participantName;
   availabilityOptions.style.setProperty("--availability-columns", dates.length);
   availabilityOptions.append(createAvailabilityMatrix(
     dates,
@@ -855,7 +1147,7 @@ function renderSuggestionPoll(config) {
   if (!suggestionPoll) return;
   suggestionPoll.hidden = !config.published;
   renderPollInfo(suggestionInfo, config.info);
-  applySavedParticipantName(suggestionName);
+  suggestionForm?.querySelector("button")?.toggleAttribute("disabled", !getParticipantName());
   if (config.published) {
     renderPollResultButtonInSection(suggestionPoll, "Game Vorschläge", createSuggestionResults);
   }
@@ -904,8 +1196,8 @@ function renderGameVotePoll(config) {
   renderPollInfo(gameVoteInfo, config.info);
   renderPollResultButtonInSection(gameVotePoll, "Game Voting", () => createGameVoteResults(config));
   const submitButton = gameVoteForm.querySelector("button");
-  applySavedParticipantName(gameVoteName);
-  const savedAnswers = getGameVoteEntry(getParticipantName(gameVoteName))?.answers ?? [];
+  const participantName = getParticipantName();
+  const savedAnswers = participantName ? getGameVoteEntry(participantName)?.answers ?? [] : [];
   const groups = getGameVoteGroups(config).filter((group) => Array.isArray(group.options) && group.options.length);
   gameVoteOptions.replaceChildren();
 
@@ -918,13 +1210,14 @@ function renderGameVotePoll(config) {
     return;
   }
 
-  submitButton.disabled = false;
+  submitButton.disabled = !participantName;
   gameVoteOptions.append(...groups.map((group) => createGameVoteGroup(group, savedAnswers)));
 }
 
 async function loadPolls() {
   if (!pollEmpty) return;
 
+  syncParticipantCard();
   await loadRemotePollData();
   const polls = await loadLocalData("adminPollData", initialSiteData.polls);
   renderAvailabilityPoll(polls.availability);
@@ -935,13 +1228,12 @@ async function loadPolls() {
 
 availabilityForm?.addEventListener("submit", (event) => {
   event.preventDefault();
-  const name = getParticipantName(availabilityName);
+  const name = ensureParticipantName();
   if (!name) return;
   const answers = {};
   availabilityForm.querySelectorAll('input[type="radio"]:checked').forEach((input) => {
     answers[input.name] = input.value;
   });
-  setSavedParticipantName(name);
   saveAvailabilityEntry({
     name,
     answers,
@@ -949,15 +1241,15 @@ availabilityForm?.addEventListener("submit", (event) => {
     updatedAt: new Date().toISOString(),
   });
   availabilityStatus.textContent = "Gespeichert.";
+  loadPolls();
 });
 
 suggestionForm?.addEventListener("submit", (event) => {
   event.preventDefault();
-  const name = getParticipantName(suggestionName);
+  const name = ensureParticipantName();
   const text = suggestionForm.elements.games.value.trim();
   if (!name || !text) return;
 
-  setSavedParticipantName(name);
   saveSuggestionEntry({
     id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
     name,
@@ -965,24 +1257,71 @@ suggestionForm?.addEventListener("submit", (event) => {
     createdAt: new Date().toISOString(),
   });
   suggestionForm.reset();
-  applySavedParticipantName(suggestionName);
   suggestionStatus.textContent = "Vorschlag gespeichert.";
+  loadPolls();
 });
 
 gameVoteForm?.addEventListener("submit", (event) => {
   event.preventDefault();
-  const name = getParticipantName(gameVoteName);
+  const name = ensureParticipantName();
   if (!name) return;
   const answers = [...gameVoteForm.querySelectorAll('input[name="games"]:checked')].map((input) => input.value);
-  setSavedParticipantName(name);
   saveGameVoteEntry({
     name,
     answers,
     updatedAt: new Date().toISOString(),
   });
   gameVoteStatus.textContent = "Abstimmung gespeichert.";
+  loadPolls();
 });
 
+function initParticipantUi() {
+  ensureParticipantUi();
+  if (participantUiInitialized) return;
+  participantUiInitialized = true;
+
+  participantSaveButton?.addEventListener("click", submitParticipantName);
+
+  participantForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitParticipantName();
+  });
+
+  participantEditButton?.addEventListener("click", () => {
+    renderParticipantCardStatus("");
+    openParticipantDialog(getSavedParticipantName());
+  });
+
+  participantDeleteButton?.addEventListener("click", async () => {
+    setSavedParticipantName("");
+    availabilityStatus.textContent = "";
+    suggestionStatus.textContent = "";
+    gameVoteStatus.textContent = "";
+    if (availabilityNote) availabilityNote.value = "";
+    syncParticipantCard();
+    renderParticipantCardStatus("Name geloescht.");
+    await loadPolls();
+  });
+
+  participantCloseButton?.addEventListener("click", () => {
+    if (getSavedParticipantName()) {
+      closeParticipantDialog();
+      return;
+    }
+
+    renderParticipantCardStatus("Bitte zuerst einen Namen speichern.", true);
+    participantNameInput?.focus();
+  });
+
+  participantDialog?.addEventListener("cancel", (event) => {
+    if (getSavedParticipantName()) return;
+    event.preventDefault();
+    renderParticipantCardStatus("Bitte zuerst einen Namen speichern.", true);
+  });
+}
+
+initParticipantUi();
+syncParticipantCard();
 loadPolls();
 
 function createPollResultSection(titleText) {
@@ -1003,73 +1342,6 @@ function createResultLine(label, value, className = "") {
   count.textContent = value;
   row.append(name, count);
   return row;
-}
-
-function createAvailabilityResults(config) {
-  const section = createPollResultSection("Auswertung");
-  const entries = getAvailabilityEntries();
-  const dates = getDateRange(config.startDate, config.endDate);
-
-  if (!dates.length) {
-    const empty = document.createElement("p");
-    empty.className = "poll-result-empty";
-    empty.textContent = "Noch kein Zeitraum festgelegt.";
-    section.append(empty);
-    return section;
-  }
-
-  if (!entries.length) {
-    const empty = document.createElement("p");
-    empty.className = "poll-result-empty";
-    empty.textContent = "Noch keine Antworten.";
-    section.append(empty);
-    return section;
-  }
-
-  const totals = document.createElement("div");
-  totals.className = "poll-result-grid";
-  dates.forEach((date) => {
-    const label = new Intl.DateTimeFormat("de-DE", {
-      weekday: "short",
-      day: "2-digit",
-      month: "2-digit",
-    }).format(new Date(`${date}T00:00:00`));
-    const counts = entries.reduce((result, entry) => {
-      const answer = entry.answers?.[date] ?? "open";
-      result[answer] = (result[answer] ?? 0) + 1;
-      return result;
-    }, { yes: 0, maybe: 0, no: 0, open: 0 });
-    totals.append(createResultLine(label, `${counts.yes} kann / ${counts.maybe} vielleicht / ${counts.no} nein`, "result-open"));
-  });
-  section.append(totals);
-
-  const participantList = document.createElement("div");
-  participantList.className = "poll-result-group";
-  const participantTitle = document.createElement("h5");
-  participantTitle.textContent = "Teilnehmer";
-  participantList.append(participantTitle);
-  entries.forEach((entry) => {
-    const values = dates.map((date) => {
-      const label = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(new Date(`${date}T00:00:00`));
-      const answer = {
-        yes: "Kann",
-        maybe: "Vielleicht",
-        no: "Nein",
-        open: "Offen",
-      }[entry.answers?.[date] ?? "open"];
-      return `${label}: ${answer}`;
-    });
-    participantList.append(createResultLine(entry.name, values.join(" | "), "result-open"));
-    if (entry.note?.trim()) {
-      const note = document.createElement("p");
-      note.className = "poll-result-note";
-      note.textContent = entry.note.trim();
-      participantList.append(note);
-    }
-  });
-  section.append(participantList);
-
-  return section;
 }
 
 function getAvailabilityAnswerText(value) {
@@ -1243,10 +1515,8 @@ function renderPollResultButtonInSection(section, titleText, createResults) {
   head.append(button);
 }
 
-const ADMIN_PASSWORD = "patalympics";
-
 function isAdminLoggedIn() {
-  return getStoredJson("adminLoggedIn", false);
+  return Boolean(getSavedAdminSession()?.isAdmin);
 }
 
 function createAdminField(labelText, input) {
@@ -1274,7 +1544,56 @@ function createAdminTextarea(value = "", rows = 5) {
   return textarea;
 }
 
+function createActionButton(text, className = "admin-secondary-button", type = "button") {
+  const button = document.createElement("button");
+  button.className = className;
+  button.type = type;
+  button.textContent = text;
+  return button;
+}
+
+function createAdminEntry(titleText, detailText = "", actionButton = null) {
+  const row = document.createElement("div");
+  row.className = "admin-list-row";
+
+  const copy = document.createElement("div");
+  copy.className = "admin-list-copy";
+
+  const title = document.createElement("strong");
+  title.textContent = titleText;
+  copy.append(title);
+
+  if (detailText) {
+    const detail = document.createElement("p");
+    detail.textContent = detailText;
+    copy.append(detail);
+  }
+
+  row.append(copy);
+  if (actionButton) row.append(actionButton);
+  return row;
+}
+
+function createAdminList(items, emptyText) {
+  const wrap = document.createElement("div");
+  wrap.className = "admin-list";
+
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "admin-list-empty";
+    empty.textContent = emptyText;
+    wrap.append(empty);
+    return wrap;
+  }
+
+  wrap.append(...items);
+  return wrap;
+}
+
 async function getAdminData() {
+  const session = await ensureAdminSession();
+  if (!session?.isAdmin) return null;
+  await loadRemotePollData();
   return {
     news: await loadLocalData("adminNewsData", initialSiteData.news),
     calendar: await loadLocalData("adminCalendarData", initialSiteData.calendar),
@@ -1284,17 +1603,25 @@ async function getAdminData() {
 }
 
 async function waitForRemoteWrites() {
-  if (!pendingRemoteWrites.length) return;
+  if (!pendingRemoteWrites.length) return true;
   const writes = pendingRemoteWrites.splice(0, pendingRemoteWrites.length);
-  await Promise.race([
-    Promise.allSettled(writes),
-    new Promise((resolve) => setTimeout(resolve, 1200)),
+  const results = await Promise.race([
+    Promise.all(writes),
+    new Promise((resolve) => setTimeout(() => resolve("timeout"), 1800)),
   ]);
+
+  if (results === "timeout") return false;
+  return results.every((result) => result !== null);
 }
 
 async function refreshAfterAdminSave(status, message) {
+  const isSaved = await waitForRemoteWrites();
+  if (!isSaved && supabaseEnabled) {
+    status.textContent = "Speichern fehlgeschlagen. Bitte Admin-Login prüfen.";
+    return;
+  }
+
   status.textContent = message;
-  await waitForRemoteWrites();
   setTimeout(() => globalThis.location.reload(), 450);
 }
 
@@ -1303,30 +1630,32 @@ function renderAdminLogin(modalBody) {
 
   const form = document.createElement("form");
   form.className = "admin-form";
+  const email = createAdminInput("email");
   const password = createAdminInput("password");
   const status = document.createElement("p");
   status.className = "form-status";
 
   form.append(
+    createAdminField("Admin E-Mail", email),
     createAdminField("Admin Passwort", password),
     createAdminButton("Einloggen"),
     status
   );
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    status.textContent = "Prüfe Login...";
+    const result = await signInAdmin(email.value.trim(), password.value);
 
-    if (password.value === ADMIN_PASSWORD) {
-      setStoredJson("adminLoggedIn", true);
-      const modal = modalBody.closest("dialog");
-      modal?.close();
-      refreshPageAdminState();
-      renderInlineAdminTools();
-      document.dispatchEvent(new CustomEvent("admin-state-change"));
+    if (!result.session) {
+      status.textContent = result.error;
       return;
     }
 
-    status.textContent = "Passwort stimmt nicht.";
+    const modal = modalBody.closest("dialog");
+    modal?.close();
+    refreshPageAdminState();
+    renderInlineAdminTools();
   });
 
   modalBody.append(form);
@@ -1355,6 +1684,10 @@ async function renderAdminPanel(modalBody) {
   modalBody.replaceChildren();
 
   const data = await getAdminData();
+  if (!data) {
+    renderAdminLogin(modalBody);
+    return;
+  }
   const wrap = document.createElement("div");
   wrap.className = "admin-grid";
 
@@ -1410,6 +1743,7 @@ async function renderInlineAdminTools() {
   }
 
   const data = await getAdminData();
+  if (!data) return;
   const config = getInlineAdminConfig(data);
   if (!config) return;
 
@@ -1447,14 +1781,34 @@ function createNewsAdmin(news) {
   const title = createAdminInput();
   const author = createAdminInput("text", "Admin");
   const body = createAdminTextarea("", 4);
+  const listTitle = document.createElement("h4");
+  listTitle.textContent = "Vorhandene News";
   const status = document.createElement("p");
   status.className = "form-status";
+  const entries = createAdminList(
+    news.map((item, index) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        const nextNews = news.filter((_, currentIndex) => currentIndex !== index);
+        setStoredJson("adminNewsData", nextNews);
+        refreshAfterAdminSave(status, "News gelöscht.");
+      });
+      return createAdminEntry(
+        item.title || "Ohne Titel",
+        [formatDate(item.date), item.author].filter(Boolean).join(" / "),
+        remove
+      );
+    }),
+    "Noch keine News gespeichert."
+  );
 
   form.append(
     createAdminField("Titel", title),
     createAdminField("Autor", author),
     createAdminField("Text", body),
     createAdminButton("News speichern"),
+    listTitle,
+    entries,
     status
   );
 
@@ -1484,14 +1838,34 @@ function createCalendarAdmin(events) {
   const date = createAdminInput("date");
   const time = createAdminInput("time");
   const title = createAdminInput();
+  const listTitle = document.createElement("h4");
+  listTitle.textContent = "Vorhandene Termine";
   const status = document.createElement("p");
   status.className = "form-status";
+  const entries = createAdminList(
+    events.map((item, index) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        const nextEvents = events.filter((_, currentIndex) => currentIndex !== index);
+        setStoredJson("adminCalendarData", nextEvents);
+        refreshAfterAdminSave(status, "Termin gelöscht.");
+      });
+      return createAdminEntry(
+        item.title || "Ohne Titel",
+        [formatDate(item.date), item.time].filter(Boolean).join(" / "),
+        remove
+      );
+    }),
+    "Noch keine Termine gespeichert."
+  );
 
   form.append(
     createAdminField("Datum", date),
     createAdminField("Uhrzeit", time),
     createAdminField("Termin", title),
     createAdminButton("Termin speichern"),
+    listTitle,
+    entries,
     status
   );
 
@@ -1590,6 +1964,78 @@ function createPollAdmin(polls) {
     categoryEditor,
     addCategoryButton
   );
+
+  const availabilityEntries = getAvailabilityEntries();
+  const suggestionEntries = getSuggestionEntries();
+  const gameVoteEntries = getGameVoteEntries();
+
+  const availabilityDataTitle = document.createElement("h4");
+  availabilityDataTitle.textContent = "Antworten";
+  const availabilityDataList = createAdminList(
+    availabilityEntries.map((entry) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        deleteAvailabilityEntry(entry.name);
+        refreshAfterAdminSave(status, "Verfügbarkeits-Antwort gelöscht.");
+      });
+      return createAdminEntry(
+        entry.name,
+        `${Object.keys(entry.answers ?? {}).length} Tage${entry.note?.trim() ? " / mit Info" : ""}`,
+        remove
+      );
+    }),
+    "Noch keine Antworten vorhanden."
+  );
+  const availabilityClear = createActionButton("Alle Antworten löschen");
+  availabilityClear.addEventListener("click", () => {
+    availabilityEntries.forEach((entry) => deleteAvailabilityEntry(entry.name));
+    refreshAfterAdminSave(status, "Alle Verfügbarkeits-Antworten gelöscht.");
+  });
+  availability.append(availabilityDataTitle, availabilityDataList, availabilityClear);
+
+  const suggestionsDataTitle = document.createElement("h4");
+  suggestionsDataTitle.textContent = "Vorschläge";
+  const suggestionsDataList = createAdminList(
+    suggestionEntries.map((entry) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        deleteSuggestionEntry(entry.id);
+        refreshAfterAdminSave(status, "Vorschlag gelöscht.");
+      });
+      return createAdminEntry(entry.name, entry.text, remove);
+    }),
+    "Noch keine Vorschläge vorhanden."
+  );
+  const suggestionsClear = createActionButton("Alle Vorschläge löschen");
+  suggestionsClear.addEventListener("click", () => {
+    suggestionEntries.forEach((entry) => deleteSuggestionEntry(entry.id));
+    refreshAfterAdminSave(status, "Alle Vorschläge gelöscht.");
+  });
+  suggestions.append(suggestionsDataTitle, suggestionsDataList, suggestionsClear);
+
+  const gameVoteDataTitle = document.createElement("h4");
+  gameVoteDataTitle.textContent = "Votes";
+  const gameVoteDataList = createAdminList(
+    gameVoteEntries.map((entry) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        deleteGameVoteEntry(entry.name);
+        refreshAfterAdminSave(status, "Vote gelöscht.");
+      });
+      return createAdminEntry(
+        entry.name,
+        `${(entry.answers ?? []).length} Auswahl${(entry.answers ?? []).length === 1 ? "" : "en"}`,
+        remove
+      );
+    }),
+    "Noch keine Votes vorhanden."
+  );
+  const gameVoteClear = createActionButton("Alle Votes löschen");
+  gameVoteClear.addEventListener("click", () => {
+    gameVoteEntries.forEach((entry) => deleteGameVoteEntry(entry.name));
+    refreshAfterAdminSave(status, "Alle Votes gelöscht.");
+  });
+  gameVote.append(gameVoteDataTitle, gameVoteDataList, gameVoteClear);
 
   form.append(availability, suggestions, gameVote, createAdminButton("Polls speichern"), status);
 
@@ -1795,10 +2241,30 @@ function createRankingAdmin(ranking) {
     setStoredJson("adminRankingArchive", [archiveEntry, ...archive]);
     status.textContent = "Rangliste archiviert.";
   });
+  const clearRankingButton = createActionButton("Rangliste löschen");
+  clearRankingButton.addEventListener("click", () => {
+    const emptyRanking = {
+      mode: "solo",
+      days: buildDays(),
+      players: [],
+    };
+    setStoredJson("adminRankingData", emptyRanking);
+    tableArea.replaceChildren();
+    const empty = document.createElement("p");
+    empty.className = "empty-state table-empty-state";
+    empty.textContent = "Noch keine Rangliste erstellt.";
+    tableArea.append(empty);
+    refreshAfterAdminSave(status, "Rangliste gelöscht.");
+  });
+  const clearArchiveButton = createActionButton("Archiv löschen");
+  clearArchiveButton.addEventListener("click", () => {
+    setStoredJson("adminRankingArchive", []);
+    refreshAfterAdminSave(status, "Archiv gelöscht.");
+  });
 
   const actions = document.createElement("div");
   actions.className = "admin-actions";
-  actions.append(createAdminButton("Rangliste speichern"), archiveButton);
+  actions.append(createAdminButton("Rangliste speichern"), archiveButton, clearRankingButton, clearArchiveButton);
 
   settings.append(
     createAdminField("Anzahl Tage", dayCount),
@@ -1867,7 +2333,7 @@ function initAdminUi() {
   title.textContent = "Admin";
   const close = document.createElement("button");
   close.type = "button";
-  close.textContent = "Schliessen";
+  close.textContent = "Schließen";
   close.addEventListener("click", () => modal.close());
   header.append(title, close);
 
@@ -1875,8 +2341,9 @@ function initAdminUi() {
   body.className = "admin-modal-body";
   modal.append(header, body);
 
-  button.addEventListener("click", () => {
-    if (isAdminLoggedIn()) {
+  button.addEventListener("click", async () => {
+    const session = await ensureAdminSession();
+    if (session?.isAdmin) {
       renderInlineAdminTools();
     } else {
       modal.showModal();
@@ -1885,7 +2352,7 @@ function initAdminUi() {
   });
 
   logout.addEventListener("click", () => {
-    setStoredJson("adminLoggedIn", false);
+    clearAdminSession();
     document.querySelector(".inline-admin")?.remove();
     refreshPageAdminState();
     updateLogoutVisibility();
@@ -1894,7 +2361,10 @@ function initAdminUi() {
   actions.append(logout, button);
   document.body.append(actions, modal);
   updateLogoutVisibility();
-  if (isAdminLoggedIn()) renderInlineAdminTools();
+  ensureAdminSession().then((session) => {
+    updateLogoutVisibility();
+    if (session?.isAdmin) renderInlineAdminTools();
+  });
 }
 
 initAdminUi();

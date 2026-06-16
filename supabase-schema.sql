@@ -34,82 +34,177 @@ create table if not exists public.poll_game_votes (
   unique (participant_name)
 );
 
+create table if not exists public.admin_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text unique not null,
+  created_at timestamptz not null default now()
+);
+
 alter table public.site_content enable row level security;
 alter table public.poll_availability_answers enable row level security;
 alter table public.poll_game_suggestions enable row level security;
 alter table public.poll_game_votes enable row level security;
+alter table public.admin_users enable row level security;
+
+grant usage on schema public to anon;
+grant usage on schema public to authenticated;
+grant select on public.site_content to anon;
+grant select, insert, update, delete on public.site_content to authenticated;
+grant select, insert, update, delete on public.poll_availability_answers to anon;
+grant select, insert, update, delete on public.poll_availability_answers to authenticated;
+grant select, insert, delete on public.poll_game_suggestions to anon;
+grant select, insert, delete on public.poll_game_suggestions to authenticated;
+grant select, insert, update, delete on public.poll_game_votes to anon;
+grant select, insert, update, delete on public.poll_game_votes to authenticated;
+grant select on public.admin_users to authenticated;
 
 drop policy if exists "public read site content" on public.site_content;
 create policy "public read site content"
 on public.site_content for select
-to anon
+to anon, authenticated
 using (true);
 
-drop policy if exists "public write site content" on public.site_content;
-create policy "public write site content"
+drop policy if exists "admin insert site content" on public.site_content;
+create policy "admin insert site content"
 on public.site_content for insert
-to anon
-with check (true);
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+);
 
-drop policy if exists "public update site content" on public.site_content;
-create policy "public update site content"
+drop policy if exists "admin update site content" on public.site_content;
+create policy "admin update site content"
 on public.site_content for update
-to anon
-using (true)
-with check (true);
+to authenticated
+using (
+  exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "admin delete site content" on public.site_content;
+create policy "admin delete site content"
+on public.site_content for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+);
 
 drop policy if exists "public read availability" on public.poll_availability_answers;
 create policy "public read availability"
 on public.poll_availability_answers for select
-to anon
+to anon, authenticated
 using (true);
 
 drop policy if exists "public write availability" on public.poll_availability_answers;
 create policy "public write availability"
 on public.poll_availability_answers for insert
-to anon
+to anon, authenticated
 with check (char_length(participant_name) between 1 and 80);
 
 drop policy if exists "public update own availability by name" on public.poll_availability_answers;
 create policy "public update own availability by name"
 on public.poll_availability_answers for update
-to anon
+to anon, authenticated
 using (char_length(participant_name) between 1 and 80)
 with check (char_length(participant_name) between 1 and 80);
+
+drop policy if exists "public delete availability" on public.poll_availability_answers;
+create policy "admin delete availability"
+on public.poll_availability_answers for delete
+to authenticated
+using (
+  char_length(participant_name) between 1 and 80
+  and exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+);
 
 drop policy if exists "public read suggestions" on public.poll_game_suggestions;
 create policy "public read suggestions"
 on public.poll_game_suggestions for select
-to anon
+to anon, authenticated
 using (true);
 
 drop policy if exists "public write suggestions" on public.poll_game_suggestions;
 create policy "public write suggestions"
 on public.poll_game_suggestions for insert
-to anon
+to anon, authenticated
 with check (
   char_length(participant_name) between 1 and 80
   and char_length(suggestion) between 1 and 500
 );
 
+drop policy if exists "public delete suggestions" on public.poll_game_suggestions;
+create policy "admin delete suggestions"
+on public.poll_game_suggestions for delete
+to authenticated
+using (
+  char_length(participant_name) between 1 and 80
+  and char_length(suggestion) between 1 and 500
+  and exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+);
+
 drop policy if exists "public read votes" on public.poll_game_votes;
 create policy "public read votes"
 on public.poll_game_votes for select
-to anon
+to anon, authenticated
 using (true);
 
 drop policy if exists "public write votes" on public.poll_game_votes;
 create policy "public write votes"
 on public.poll_game_votes for insert
-to anon
+to anon, authenticated
 with check (char_length(participant_name) between 1 and 80);
 
 drop policy if exists "public update own votes by name" on public.poll_game_votes;
 create policy "public update own votes by name"
 on public.poll_game_votes for update
-to anon
+to anon, authenticated
 using (char_length(participant_name) between 1 and 80)
 with check (char_length(participant_name) between 1 and 80);
+
+drop policy if exists "public delete votes" on public.poll_game_votes;
+create policy "admin delete votes"
+on public.poll_game_votes for delete
+to authenticated
+using (
+  char_length(participant_name) between 1 and 80
+  and exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "admin users can read own row" on public.admin_users;
+create policy "admin users can read own row"
+on public.admin_users for select
+to authenticated
+using (user_id = auth.uid());
 
 insert into public.site_content (key, value)
 values

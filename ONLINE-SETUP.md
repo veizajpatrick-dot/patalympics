@@ -2,7 +2,7 @@
 
 ## 1. GitHub Pages
 
-Dieses Projekt ist aktuell eine statische Website. Das passt gut zu GitHub Pages.
+Dieses Projekt ist eine statische Website. Das passt gut zu GitHub Pages.
 
 In GitHub:
 
@@ -24,42 +24,64 @@ In Supabase:
 3. Den Inhalt aus `supabase-schema.sql` einfügen.
 4. Ausführen.
 
+Wenn du die SQL-Datei später aktualisierst, kannst du sie einfach erneut ausführen.
+
 Dadurch entstehen Tabellen für:
 
 - allgemeine Admin-Inhalte
 - Verfügbarkeits-Antworten
 - Game-Vorschläge
 - Game-Votes
+- Admin-Freigaben
 
-Für den aktuellen privaten Start dürfen die Admin-Inhalte über die Website geschrieben werden. Das ist praktisch, aber noch keine starke Admin-Sicherheit. Vor einer größeren öffentlichen Nutzung sollte das auf Supabase Auth oder Edge Functions umgestellt werden.
+## 3. Admin anlegen
 
-## 3. Supabase Zugangsdaten
+Für den Admin-Zugang brauchst du jetzt einen echten Supabase-User.
 
-Die Datei `supabase-config.example.js` kopieren und umbenennen zu:
+In Supabase:
+
+1. `Authentication` öffnen.
+2. Unter `Users` einen User mit E-Mail und Passwort anlegen.
+3. Die `id` dieses Users kopieren.
+4. Im `SQL Editor` diesen Befehl ausführen:
+
+```sql
+insert into public.admin_users (user_id, email)
+values ('DEINE-USER-ID', 'deine-mail@example.com')
+on conflict (user_id) do update
+set email = excluded.email;
+```
+
+Danach kann sich genau dieser User über den Admin-Login auf der Website anmelden.
+
+## 4. Supabase Zugangsdaten
+
+Die Website ist bereits mit Supabase verbunden. Die Zugangsdaten stehen in:
 
 ```txt
 supabase-config.js
-```
-
-Dann eintragen:
-
-```js
-window.PATALYMPICS_SUPABASE = {
-  url: "https://DEIN-PROJECT.supabase.co",
-  anonKey: "DEIN-ANON-PUBLIC-KEY"
-};
 ```
 
 Wichtig:
 
 - `anon public key` oder `publishable key` ist okay für die Website.
 - `service_role key` niemals in die Website eintragen.
-- Wenn du den `publishable key` verwendest, darf `supabase-config.js` mit zu GitHub Pages.
+- `supabase-config.js` muss mit zu GitHub Pages hochgeladen werden.
 
-## 4. Nächster Entwicklungsschritt
+## 5. Speicherung
 
-Aktuell speichert die Website noch lokal im Browser.
+Die Website nutzt Supabase für gemeinsame Online-Daten.
 
-Als Nächstes muss `site.js` so umgebaut werden, dass es zuerst Supabase nutzt und nur als Fallback `localStorage`.
+Lokal im Browser werden nur zwei kleine Dinge gespeichert:
 
-Danach funktionieren Polls, News, Kalender und Rangliste für alle Teilnehmer gemeinsam online.
+- der Admin-Login für die aktuelle Nutzung
+- der Teilnehmername auf der Poll-Seite, damit er nicht bei jeder Abstimmung neu eingetragen werden muss
+
+Online gespeichert werden:
+
+- News
+- Kalender
+- Poll-Einstellungen
+- Poll-Antworten
+- Rangliste
+- Ranglisten-Archiv
