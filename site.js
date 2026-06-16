@@ -33,8 +33,15 @@ const adminStore = {};
 const remoteStore = {};
 const pendingRemoteWrites = [];
 let remotePollDataLoaded = false;
-const supabaseConfig = globalThis.PATALYMPICS_SUPABASE ?? null;
+const defaultSupabaseConfig = {
+  url: "https://brizdcpbzqqrkxunfiwl.supabase.co",
+  anonKey: "sb_publishable_108t7jwS4__1lsxyac2kKw_7Tnb-6bZ",
+};
+const supabaseConfig = globalThis.PATALYMPICS_SUPABASE ?? defaultSupabaseConfig;
 const supabaseEnabled = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
+if (supabaseEnabled) {
+  console.info("Patalympics: Supabase aktiv.");
+}
 const initialSiteData = {
   news: [],
   calendar: [],
