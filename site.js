@@ -22,6 +22,7 @@ const gameVoteInfo = document.querySelector("#game-vote-info");
 const gameVoteForm = document.querySelector("#game-vote-form");
 const gameVoteOptions = document.querySelector("#game-vote-options");
 const gameVoteStatus = document.querySelector("#game-vote-status");
+const userContent = document.querySelector("#user-content");
 let participantChip = document.querySelector("#participant-chip");
 let participantCurrentName = document.querySelector("#participant-current-name");
 let participantDialog = document.querySelector("#participant-dialog");
@@ -464,34 +465,26 @@ async function loadRemoteParticipants() {
 }
 
 function saveRemoteParticipantEntry(name) {
-  return supabaseFetch("participants?on_conflict=participant_name", {
+  return supabaseFetch("rpc/register_participant", {
     method: "POST",
-    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
     body: JSON.stringify({
-      participant_name: name,
+      participant_name_input: name,
     }),
   });
 }
 
 function deleteRemoteParticipantEntry(name) {
-  return deleteRemoteRows(`participants?participant_name=eq.${encodeURIComponent(name)}`);
+  return supabaseFetch("rpc/admin_delete_participant", {
+    method: "POST",
+    body: JSON.stringify({ participant_name_input: name }),
+  });
 }
 
 function updateRemoteParticipantName(oldName, newName) {
-  const encodedName = encodeURIComponent(oldName);
-  const body = JSON.stringify({ participant_name: newName });
-  const options = {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body,
-  };
-
-  return Promise.all([
-    supabaseFetch(`participants?participant_name=eq.${encodedName}`, options),
-    supabaseFetch(`poll_availability_answers?participant_name=eq.${encodedName}`, options),
-    supabaseFetch(`poll_game_votes?participant_name=eq.${encodedName}`, options),
-    supabaseFetch(`poll_game_suggestions?participant_name=eq.${encodedName}`, options),
-  ]);
+  return supabaseFetch("rpc/admin_rename_participant", {
+    method: "POST",
+    body: JSON.stringify({ old_name: oldName, new_name: newName }),
+  });
 }
 
 function formatDate(value) {
@@ -1001,6 +994,7 @@ function syncParticipantCard() {
   if (participantCurrentName) participantCurrentName.textContent = savedName;
 
   if (savedName) {
+    saveRemoteParticipantEntry(savedName);
     closeParticipantDialog();
     return;
   }
@@ -1026,9 +1020,11 @@ async function submitParticipantName() {
   }
 
   setSavedParticipantName(name);
-  queueRemoteWrite(saveRemoteParticipantEntry(name));
+  const isSavedOnline = await saveRemoteParticipantEntry(name);
   syncParticipantCard();
-  renderParticipantCardStatus("Name gespeichert.");
+  renderParticipantCardStatus(isSavedOnline || !supabaseEnabled
+    ? "Name gespeichert."
+    : "Name lokal gespeichert, online aber noch nicht angekommen.", !isSavedOnline && supabaseEnabled);
   await loadPolls();
 }
 
@@ -1124,6 +1120,34 @@ function deleteGameVoteEntry(name) {
   const nextEntries = getGameVoteEntries().filter((entry) => getParticipantKey(entry.name) !== getParticipantKey(name));
   setStoredJson("pollGameVoteAnswers", { participants: nextEntries });
   queueRemoteWrite(deleteRemoteGameVoteEntry(name));
+}
+
+function getKnownParticipants(participants = []) {
+  const participantMap = new Map();
+
+  function addParticipant(name, createdAt = "", source = "") {
+    const trimmed = name?.trim();
+    if (!trimmed) return;
+    const key = getParticipantKey(trimmed);
+    const current = participantMap.get(key);
+    if (current) {
+      if (source && !current.sources.includes(source)) current.sources.push(source);
+      if (!current.createdAt && createdAt) current.createdAt = createdAt;
+      return;
+    }
+    participantMap.set(key, {
+      name: trimmed,
+      createdAt,
+      sources: source ? [source] : [],
+    });
+  }
+
+  participants.forEach((entry) => addParticipant(entry.name, entry.createdAt, "User"));
+  getAvailabilityEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Verfügbarkeit"));
+  getSuggestionEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Vorschläge"));
+  getGameVoteEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Votes"));
+
+  return [...participantMap.values()].sort((a, b) => a.name.localeCompare(b.name, "de-DE"));
 }
 
 function createMatrixLabel(text, className) {
@@ -1389,6 +1413,7 @@ function initParticipantUi() {
 initParticipantUi();
 syncParticipantCard();
 loadPolls();
+renderUserPage();
 
 function createPollResultSection(titleText) {
   const section = document.createElement("section");
@@ -1721,7 +1746,7 @@ function renderAdminLogin(modalBody) {
 
     const modal = modalBody.closest("dialog");
     modal?.close();
-    refreshPageAdminState();
+    await refreshPageAdminState();
     renderInlineAdminTools();
   });
 
@@ -1762,6 +1787,7 @@ async function renderAdminPanel(modalBody) {
     renderAdminSection("News", createNewsAdmin(data.news)),
     renderAdminSection("Kalender", createCalendarAdmin(data.calendar)),
     renderAdminSection("Polls", createPollAdmin(data.polls, data.participants)),
+    renderAdminSection("User", createUserAdmin(data.participants)),
     renderAdminSection("Rangliste", createRankingAdmin(data.ranking))
   );
 
@@ -1799,6 +1825,10 @@ function getInlineAdminConfig(data) {
     };
   }
 
+  if (path.endsWith("/user.html")) {
+    return null;
+  }
+
   return null;
 }
 
@@ -1832,6 +1862,23 @@ async function renderInlineAdminTools() {
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+async function renderUserPage() {
+  if (!userContent) return;
+
+  const session = await ensureAdminSession();
+  if (!session?.isAdmin) {
+    const message = document.createElement("p");
+    message.className = "empty-state user-empty-state";
+    message.textContent = "User sind nur für Admins sichtbar. Bitte unten rechts als Admin einloggen.";
+    userContent.replaceChildren(message);
+    return;
+  }
+
+  await loadRemotePollData();
+  const participants = await loadRemoteParticipants();
+  userContent.replaceChildren(createUserAdmin(participants));
+}
+
 async function refreshPageAdminState() {
   document.querySelectorAll(".poll-section-result-button, .availability-admin-summary").forEach((element) => {
     element.remove();
@@ -1840,6 +1887,7 @@ async function refreshPageAdminState() {
   if (pollEmpty) {
     await loadPolls();
   }
+  await renderUserPage();
 }
 
 function createNewsAdmin(news) {
@@ -1955,6 +2003,81 @@ function createCalendarAdmin(events) {
   return form;
 }
 
+function createUserAdmin(participants = []) {
+  const form = document.createElement("form");
+  form.className = "admin-form user-admin-form";
+  const status = document.createElement("p");
+  status.className = "form-status";
+  const addName = createAdminInput("text");
+  const addButton = createActionButton("User hinzufügen", "admin-secondary-button");
+  const listTitle = document.createElement("h4");
+  listTitle.textContent = "Teilnehmer";
+  const knownParticipants = getKnownParticipants(participants);
+
+  addButton.addEventListener("click", () => {
+    const nextName = addName.value.trim();
+    if (!nextName) {
+      status.textContent = "Bitte einen Namen eintragen.";
+      return;
+    }
+    queueRemoteWrite(saveRemoteParticipantEntry(nextName));
+    refreshAfterAdminSave(status, "User hinzugefügt.");
+  });
+
+  const entries = createAdminList(
+    knownParticipants.map((entry) => {
+      const row = document.createElement("div");
+      row.className = "admin-list-row participant-admin-row";
+      const editor = document.createElement("div");
+      editor.className = "participant-admin-editor";
+      const name = createAdminInput("text", entry.name);
+      name.className = "participant-admin-name";
+      const meta = document.createElement("p");
+      const sources = entry.sources.length ? entry.sources.join(", ") : "User";
+      meta.textContent = [sources, entry.createdAt ? `Registriert: ${formatDate(entry.createdAt)}` : ""]
+        .filter(Boolean)
+        .join(" / ");
+      const actions = document.createElement("div");
+      actions.className = "participant-admin-actions";
+      const save = createActionButton("Speichern", "admin-secondary-button");
+      const remove = createActionButton("Löschen", "admin-remove-button");
+
+      save.addEventListener("click", () => {
+        const nextName = name.value.trim();
+        if (!nextName || getParticipantKey(nextName) === getParticipantKey(entry.name)) return;
+        queueRemoteWrite(updateRemoteParticipantName(entry.name, nextName));
+        refreshAfterAdminSave(status, "User gespeichert.");
+      });
+
+      remove.addEventListener("click", () => {
+        if (!globalThis.confirm?.(`User "${entry.name}" wirklich löschen? Alle Poll-Antworten dieses Users werden mitgelöscht.`)) return;
+        queueRemoteWrite(deleteRemoteParticipantEntry(entry.name));
+        refreshAfterAdminSave(status, "User gelöscht.");
+      });
+
+      editor.append(name, meta);
+      actions.append(save, remove);
+      row.append(editor, actions);
+      return row;
+    }),
+    "Noch keine User online gespeichert."
+  );
+
+  form.append(
+    createAdminField("Neuer User", addName),
+    addButton,
+    listTitle,
+    entries,
+    status
+  );
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+  });
+
+  return form;
+}
+
 function createPollAdmin(polls, participants = []) {
   const form = document.createElement("form");
   form.className = "admin-form poll-admin-form";
@@ -2035,41 +2158,6 @@ function createPollAdmin(polls, participants = []) {
   const availabilityEntries = getAvailabilityEntries();
   const suggestionEntries = getSuggestionEntries();
   const gameVoteEntries = getGameVoteEntries();
-
-  const participantDataTitle = document.createElement("h4");
-  participantDataTitle.textContent = "Teilnehmer";
-  const participantDataList = createAdminList(
-    participants.map((entry) => {
-      const row = document.createElement("div");
-      row.className = "admin-list-row participant-admin-row";
-      const editor = document.createElement("div");
-      editor.className = "participant-admin-editor";
-      const name = createAdminInput("text", entry.name);
-      name.className = "participant-admin-name";
-      const meta = document.createElement("p");
-      meta.textContent = entry.createdAt ? `Registriert: ${formatDate(entry.createdAt)}` : "";
-      const actions = document.createElement("div");
-      actions.className = "participant-admin-actions";
-      const save = createActionButton("Speichern", "admin-secondary-button");
-      const remove = createActionButton("Löschen", "admin-remove-button");
-      save.addEventListener("click", () => {
-        const nextName = name.value.trim();
-        if (!nextName || getParticipantKey(nextName) === getParticipantKey(entry.name)) return;
-        queueRemoteWrite(updateRemoteParticipantName(entry.name, nextName));
-        refreshAfterAdminSave(status, "Teilnehmer gespeichert.");
-      });
-      remove.addEventListener("click", () => {
-        queueRemoteWrite(deleteRemoteParticipantEntry(entry.name));
-        refreshAfterAdminSave(status, "Teilnehmer gelöscht.");
-      });
-      editor.append(name, meta);
-      actions.append(save, remove);
-      row.append(editor, actions);
-      return row;
-    }),
-    "Noch keine Teilnehmer registriert."
-  );
-  availability.append(participantDataTitle, participantDataList);
 
   const availabilityDataTitle = document.createElement("h4");
   availabilityDataTitle.textContent = "Antworten";
@@ -2465,7 +2553,10 @@ function initAdminUi() {
   updateLogoutVisibility();
   ensureAdminSession().then((session) => {
     updateLogoutVisibility();
-    if (session?.isAdmin) renderInlineAdminTools();
+    if (session?.isAdmin) {
+      renderInlineAdminTools();
+      renderUserPage();
+    }
   });
 }
 

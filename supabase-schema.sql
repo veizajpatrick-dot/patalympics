@@ -86,6 +86,122 @@ $$;
 
 grant execute on function public.resolve_admin_login(text) to anon, authenticated;
 
+create or replace function public.register_participant(participant_name_input text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cleaned_name text := nullif(trim(participant_name_input), '');
+begin
+  if cleaned_name is null or char_length(cleaned_name) > 80 then
+    raise exception 'Invalid participant name';
+  end if;
+
+  insert into public.participants (participant_name)
+  values (cleaned_name)
+  on conflict (participant_name) do nothing;
+end;
+$$;
+
+create or replace function public.admin_rename_participant(old_name text, new_name text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  old_clean text := nullif(trim(old_name), '');
+  new_clean text := nullif(trim(new_name), '');
+begin
+  if not exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  ) then
+    raise exception 'Admin access required';
+  end if;
+
+  if old_clean is null or new_clean is null or char_length(new_clean) > 80 then
+    raise exception 'Invalid participant name';
+  end if;
+
+  if old_clean = new_clean then
+    insert into public.participants (participant_name)
+    values (new_clean)
+    on conflict (participant_name) do nothing;
+    return;
+  end if;
+
+  if exists (select 1 from public.participants where participant_name = new_clean) then
+    delete from public.participants where participant_name = old_clean;
+  else
+    update public.participants
+    set participant_name = new_clean
+    where participant_name = old_clean;
+
+    if not found then
+      insert into public.participants (participant_name)
+      values (new_clean)
+      on conflict (participant_name) do nothing;
+    end if;
+  end if;
+
+  if exists (select 1 from public.poll_availability_answers where participant_name = new_clean) then
+    delete from public.poll_availability_answers where participant_name = old_clean;
+  else
+    update public.poll_availability_answers
+    set participant_name = new_clean
+    where participant_name = old_clean;
+  end if;
+
+  update public.poll_game_suggestions
+  set participant_name = new_clean
+  where participant_name = old_clean;
+
+  if exists (select 1 from public.poll_game_votes where participant_name = new_clean) then
+    delete from public.poll_game_votes where participant_name = old_clean;
+  else
+    update public.poll_game_votes
+    set participant_name = new_clean
+    where participant_name = old_clean;
+  end if;
+end;
+$$;
+
+create or replace function public.admin_delete_participant(participant_name_input text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cleaned_name text := nullif(trim(participant_name_input), '');
+begin
+  if not exists (
+    select 1
+    from public.admin_users
+    where admin_users.user_id = auth.uid()
+  ) then
+    raise exception 'Admin access required';
+  end if;
+
+  if cleaned_name is null then
+    raise exception 'Invalid participant name';
+  end if;
+
+  delete from public.participants where participant_name = cleaned_name;
+  delete from public.poll_availability_answers where participant_name = cleaned_name;
+  delete from public.poll_game_suggestions where participant_name = cleaned_name;
+  delete from public.poll_game_votes where participant_name = cleaned_name;
+end;
+$$;
+
+grant execute on function public.register_participant(text) to anon, authenticated;
+grant execute on function public.admin_rename_participant(text, text) to authenticated;
+grant execute on function public.admin_delete_participant(text) to authenticated;
+
 drop policy if exists "public read site content" on public.site_content;
 create policy "public read site content"
 on public.site_content for select
@@ -330,3 +446,9 @@ values
     "players": []
   }'::jsonb)
 on conflict (key) do nothing;
+
+insert into public.admin_users (user_id, email, login_name)
+values ('b8c123a0-29b9-4b28-9dba-5a5eb9d1a2a5', 'paddy@patalympics.com', 'paddy')
+on conflict (user_id) do update
+set email = excluded.email,
+    login_name = excluded.login_name;

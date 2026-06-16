@@ -70,7 +70,8 @@ a {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  max-width: min(720px, 64vw);
+  max-width: min(840px, 68vw);
+  flex-wrap: wrap;
 }
 
 .main-nav a {
@@ -186,6 +187,14 @@ h1 {
   background: rgba(12, 8, 20, 0.72);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(10px);
+}
+
+.user-panel {
+  width: min(760px, 100%);
+}
+
+.user-content {
+  padding: 16px;
 }
 
 .section-head {
@@ -1382,6 +1391,7 @@ h1 {
   .main-nav {
     max-width: none;
     min-width: 0;
+    flex-wrap: nowrap;
     overflow-x: auto;
     justify-content: flex-start;
     padding-bottom: 4px;
