@@ -762,11 +762,18 @@ h1 {
   font-weight: 800;
 }
 
-.admin-fab {
+.admin-floating-actions {
   position: fixed;
   right: 18px;
   bottom: 18px;
   z-index: 30;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-fab,
+.admin-logout-fab {
   min-height: 42px;
   padding: 0 16px;
   border: 1px solid rgba(255, 250, 241, 0.28);
@@ -778,6 +785,12 @@ h1 {
   font-weight: 900;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.admin-logout-fab {
+  background:
+    linear-gradient(135deg, rgba(241, 120, 115, 0.62), rgba(255, 209, 102, 0.08)),
+    rgba(18, 11, 29, 0.9);
 }
 
 .admin-modal {
@@ -1207,16 +1220,6 @@ h1 {
 
 .inline-admin .admin-form {
   padding: 16px;
-}
-
-.admin-inline-button {
-  min-height: 34px;
-  border: 1px solid rgba(255, 250, 241, 0.2);
-  color: var(--white);
-  background: rgba(18, 11, 29, 0.62);
-  font-weight: 900;
-  text-transform: uppercase;
-  cursor: pointer;
 }
 
 @media (max-width: 760px) {

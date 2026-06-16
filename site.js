@@ -1313,7 +1313,9 @@ function renderAdminLogin(modalBody) {
       setStoredJson("adminLoggedIn", true);
       const modal = modalBody.closest("dialog");
       modal?.close();
+      refreshPageAdminState();
       renderInlineAdminTools();
+      document.dispatchEvent(new CustomEvent("admin-state-change"));
       return;
     }
 
@@ -1416,19 +1418,20 @@ async function renderInlineAdminTools() {
   const title = document.createElement("h1");
   title.textContent = config.title;
 
-  const logout = document.createElement("button");
-  logout.className = "admin-inline-button";
-  logout.type = "button";
-  logout.textContent = "Logout";
-  logout.addEventListener("click", () => {
-    setStoredJson("adminLoggedIn", false);
-    panel.remove();
-  });
-
-  head.append(title, logout);
+  head.append(title);
   panel.append(head, config.content);
   main.append(panel);
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function refreshPageAdminState() {
+  document.querySelectorAll(".poll-section-result-button, .availability-admin-summary").forEach((element) => {
+    element.remove();
+  });
+
+  if (pollEmpty) {
+    await loadPolls();
+  }
 }
 
 function createNewsAdmin(news) {
@@ -1832,10 +1835,22 @@ function createRankingAdmin(ranking) {
 }
 
 function initAdminUi() {
+  const actions = document.createElement("div");
+  actions.className = "admin-floating-actions";
   const button = document.createElement("button");
   button.className = "admin-fab";
   button.type = "button";
   button.textContent = "Admin";
+  const logout = document.createElement("button");
+  logout.className = "admin-logout-fab";
+  logout.type = "button";
+  logout.textContent = "Logout";
+
+  function updateLogoutVisibility() {
+    logout.hidden = !isAdminLoggedIn();
+  }
+
+  document.addEventListener("admin-state-change", updateLogoutVisibility);
 
   const modal = document.createElement("dialog");
   modal.className = "admin-modal";
@@ -1862,7 +1877,16 @@ function initAdminUi() {
     }
   });
 
-  document.body.append(button, modal);
+  logout.addEventListener("click", () => {
+    setStoredJson("adminLoggedIn", false);
+    document.querySelector(".inline-admin")?.remove();
+    refreshPageAdminState();
+    updateLogoutVisibility();
+  });
+
+  actions.append(logout, button);
+  document.body.append(actions, modal);
+  updateLogoutVisibility();
   if (isAdminLoggedIn()) renderInlineAdminTools();
 }
 
