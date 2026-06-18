@@ -461,7 +461,8 @@ values
       { "label": "Day 2", "games": ["Game 1", "Game 2", "Game 3", "Game 4", "Game 5"] }
     ],
     "players": []
-  }'::jsonb)
+  }'::jsonb),
+  ('adminHallOfFameData', '[]'::jsonb)
 on conflict (key) do nothing;
 
 insert into public.admin_users (user_id, email, login_name)

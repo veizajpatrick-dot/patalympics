@@ -6,6 +6,7 @@ const nextMonthButton = document.querySelector("#next-month");
 const rankingPanel = document.querySelector(".ranking-panel");
 const rankingHead = document.querySelector("#ranking-head");
 const rankingBody = document.querySelector("#ranking-body");
+const hallList = document.querySelector("#hall-list");
 const pollEmpty = document.querySelector("#poll-empty");
 const availabilityPoll = document.querySelector("#availability-poll");
 const availabilityInfo = document.querySelector("#availability-info");
@@ -69,6 +70,7 @@ const initialSiteData = {
     ],
     players: [],
   },
+  hallOfFame: [],
 };
 
 function getSupabaseProjectUrl() {
@@ -927,6 +929,123 @@ async function loadRanking() {
 }
 
 loadRanking();
+
+async function renderHallOfFame() {
+  if (!hallList) return;
+
+  const items = await loadLocalData("adminHallOfFameData", initialSiteData.hallOfFame);
+  const archive = await loadLocalData("adminRankingArchive", []);
+  const entries = Array.isArray(items) ? items : [];
+  hallList.replaceChildren();
+
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Noch keine Gewinner eingetragen.";
+    hallList.append(empty);
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const card = document.createElement("article");
+    card.className = "hall-card";
+
+    const title = document.createElement("h2");
+    title.textContent = entry.title || "Patalympische Sommer Games";
+
+    const winnerFrame = document.createElement("div");
+    winnerFrame.className = "hall-winner-frame";
+
+    if (entry.image?.trim()) {
+      const image = document.createElement("img");
+      image.src = entry.image.trim();
+      image.alt = entry.winner ? `Gewinner: ${entry.winner}` : "Gewinner";
+      winnerFrame.append(image);
+    } else {
+      const fallback = document.createElement("strong");
+      fallback.textContent = entry.winner || "Gewinner";
+      winnerFrame.append(fallback);
+    }
+
+    card.append(title, winnerFrame);
+
+    const archiveEntry = getRankingArchiveEntry(archive, entry.archiveId);
+    if (archiveEntry) {
+      const button = document.createElement("button");
+      button.className = "hall-ranking-link";
+      button.type = "button";
+      button.textContent = "Rangliste ansehen";
+      button.addEventListener("click", () => openRankingArchiveDialog(archiveEntry));
+      card.append(button);
+    }
+
+    hallList.append(card);
+  });
+}
+
+renderHallOfFame();
+
+function getRankingArchiveEntry(archive, archiveId) {
+  if (!archiveId || !Array.isArray(archive)) return null;
+  return archive.find((entry) => entry.id === archiveId || entry.createdAt === archiveId) ?? null;
+}
+
+function getRankingArchiveLabel(entry, index = 0) {
+  if (entry.title?.trim()) return entry.title.trim();
+  const date = entry.createdAt ? formatDate(entry.createdAt) : `Archiv ${index + 1}`;
+  return `Rangliste ${date}`;
+}
+
+function openRankingArchiveDialog(archiveEntry) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "poll-result-dialog ranking-archive-dialog";
+  const head = document.createElement("div");
+  head.className = "poll-result-dialog-head";
+  const title = document.createElement("h3");
+  title.textContent = getRankingArchiveLabel(archiveEntry);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "Schließen";
+  close.addEventListener("click", () => dialog.close());
+  head.append(title, close);
+
+  const body = document.createElement("div");
+  body.className = "poll-result-dialog-body ranking-archive-body";
+  body.append(createRankingArchiveTable(archiveEntry.ranking ?? {}));
+  dialog.append(head, body);
+  dialog.addEventListener("close", () => dialog.remove());
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
+function createRankingArchiveTable(ranking) {
+  const wrap = document.createElement("div");
+  wrap.className = "ranking-table-wrap ranking-archive-table-wrap";
+  const table = document.createElement("table");
+  table.className = "ranking-table";
+  const thead = document.createElement("thead");
+  const tbody = document.createElement("tbody");
+  const columns = flattenRankingColumns(ranking.days ?? []);
+  const mode = ranking.mode ?? "solo";
+  const players = applyRankingPlacesAndTrends(
+    (ranking.players ?? []).filter((player) => player.published && getPlayerDisplayNames(player, mode).length),
+    columns
+  );
+
+  if (!players.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Diese archivierte Rangliste ist leer.";
+    wrap.append(empty);
+    return wrap;
+  }
+
+  thead.append(createRankingHeader(columns, mode));
+  tbody.append(...players.map((player, index) => createRankingRow(player, index, columns, mode)));
+  table.append(thead, tbody);
+  wrap.append(table);
+  return wrap;
+}
 
 function getDateRange(startDate, endDate) {
   if (!startDate || !endDate || endDate < startDate) return [];
@@ -1791,6 +1910,8 @@ async function getAdminData() {
     calendar: await loadLocalData("adminCalendarData", initialSiteData.calendar),
     polls: await loadLocalData("adminPollData", initialSiteData.polls),
     ranking: await loadLocalData("adminRankingData", initialSiteData.ranking),
+    rankingArchive: await loadLocalData("adminRankingArchive", []),
+    hallOfFame: await loadLocalData("adminHallOfFameData", initialSiteData.hallOfFame),
     participants: await loadRemoteParticipants(),
   };
 }
@@ -1895,7 +2016,8 @@ async function renderAdminPanel(modalBody) {
     renderAdminSection("Kalender", createCalendarAdmin(data.calendar)),
     renderAdminSection("Polls", createPollAdmin(data.polls)),
     renderAdminSection("User", createUserAdmin(data.participants)),
-    renderAdminSection("Rangliste", createRankingAdmin(data.ranking))
+    renderAdminSection("Rangliste", createRankingAdmin(data.ranking)),
+    renderAdminSection("Hall of Fame", createHallOfFameAdmin(data.hallOfFame, data.rankingArchive))
   );
 
   modalBody.append(wrap);
@@ -1929,6 +2051,13 @@ function getInlineAdminConfig(data) {
     return {
       title: "Rangliste bearbeiten",
       content: createRankingAdmin(data.ranking),
+    };
+  }
+
+  if (path.endsWith("/hall-of-fame.html")) {
+    return {
+      title: "Hall of Fame bearbeiten",
+      content: createHallOfFameAdmin(data.hallOfFame, data.rankingArchive),
     };
   }
 
@@ -1994,6 +2123,7 @@ async function refreshPageAdminState() {
   if (pollEmpty) {
     await loadPolls();
   }
+  await renderHallOfFame();
   await renderUserPage();
 }
 
@@ -2105,6 +2235,73 @@ function createCalendarAdmin(events) {
 
     setStoredJson("adminCalendarData", nextEvents);
     refreshAfterAdminSave(status, "Termin gespeichert.");
+  });
+
+  return form;
+}
+
+function createHallOfFameAdmin(items = [], rankingArchive = []) {
+  const form = document.createElement("form");
+  form.className = "admin-form";
+  const title = createAdminInput("text", "Patalympische Sommer Games 2025");
+  const winner = createAdminInput("text", "Pat und Ryu");
+  const image = createAdminInput("text", "assets/hall-of-fame-2025.png");
+  const archiveSelect = document.createElement("select");
+  const noArchiveOption = document.createElement("option");
+  noArchiveOption.value = "";
+  noArchiveOption.textContent = "Keine Rangliste";
+  archiveSelect.append(noArchiveOption);
+  (Array.isArray(rankingArchive) ? rankingArchive : []).forEach((entry, index) => {
+    const option = document.createElement("option");
+    option.value = entry.id || entry.createdAt || "";
+    option.textContent = getRankingArchiveLabel(entry, index);
+    archiveSelect.append(option);
+  });
+  const listTitle = document.createElement("h4");
+  listTitle.textContent = "Vorhandene Einträge";
+  const status = document.createElement("p");
+  status.className = "form-status";
+  const entries = createAdminList(
+    items.map((item, index) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        const nextItems = items.filter((_, currentIndex) => currentIndex !== index);
+        setStoredJson("adminHallOfFameData", nextItems);
+        refreshAfterAdminSave(status, "Hall-of-Fame-Eintrag gelöscht.");
+      });
+      return createAdminEntry(
+        item.title || "Ohne Titel",
+        item.winner || "Ohne Gewinner",
+        remove
+      );
+    }),
+    "Noch keine Hall-of-Fame-Einträge gespeichert."
+  );
+
+  form.append(
+    createAdminField("Titel", title),
+    createAdminField("Gewinner", winner),
+    createAdminField("Gewinner-Bild", image),
+    createAdminField("Archivierte Rangliste", archiveSelect),
+    createAdminButton("Eintrag speichern"),
+    listTitle,
+    entries,
+    status
+  );
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nextItem = {
+      title: title.value.trim(),
+      winner: winner.value.trim(),
+      image: image.value.trim(),
+      archiveId: archiveSelect.value,
+      createdAt: new Date().toISOString(),
+    };
+    const nextItems = [nextItem, ...items].filter((item) => item.title && (item.image || item.winner));
+
+    setStoredJson("adminHallOfFameData", nextItems);
+    refreshAfterAdminSave(status, "Hall-of-Fame-Eintrag gespeichert.");
   });
 
   return form;
@@ -2536,6 +2733,8 @@ function createRankingAdmin(ranking) {
       players: readEditableTablePlayers(),
     };
     const archiveEntry = {
+      id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
+      title: `Rangliste ${new Date().toLocaleDateString("de-DE")}`,
       createdAt: new Date().toISOString(),
       ranking: currentRanking,
     };
