@@ -52,7 +52,7 @@ const supabaseEnabled = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
 const initialSiteData = {
   news: [],
   calendar: [],
-  scheduleNote: { bodyHtml: "", height: 180, fontSize: 16 },
+  scheduleNote: { height: 420, boxes: [] },
   polls: {
     availability: { published: false, info: "", startDate: "", endDate: "" },
     suggestions: { published: false, info: "" },
@@ -616,6 +616,52 @@ function hasRichTextContent(value = "") {
   return wrap.textContent.replace(/\u00a0/g, " ").trim().length > 0;
 }
 
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function createScheduleBox(data = {}, index = 0) {
+  const width = clampNumber(data.width, 12, 100, 44);
+  return {
+    id: data.id || `schedule-box-${Date.now()}-${index}`,
+    bodyHtml: sanitizeRichText(data.bodyHtml || ""),
+    x: clampNumber(data.x, 0, 100 - width, 4 + index * 3),
+    y: clampNumber(data.y, 0, 100, 6 + index * 4),
+    width,
+    height: clampNumber(data.height, 60, 600, 150),
+    fontSize: clampNumber(data.fontSize, 12, 34, 16),
+  };
+}
+
+function normalizeScheduleNoteData(data = initialSiteData.scheduleNote) {
+  if (Array.isArray(data?.boxes)) {
+    return {
+      height: clampNumber(data.height, 180, 1000, 420),
+      boxes: data.boxes.map(createScheduleBox).filter((box) => hasRichTextContent(box.bodyHtml)),
+    };
+  }
+
+  if (hasRichTextContent(data?.bodyHtml || "")) {
+    return {
+      height: clampNumber(data.height, 180, 1000, 420),
+      boxes: [
+        createScheduleBox({
+          bodyHtml: data.bodyHtml,
+          x: 4,
+          y: 5,
+          width: 92,
+          height: data.height || 180,
+          fontSize: data.fontSize || 16,
+        }),
+      ],
+    };
+  }
+
+  return { height: 420, boxes: [] };
+}
+
 function createRichTextEditor(value = "", options = {}) {
   const wrap = document.createElement("div");
   wrap.className = "rich-editor";
@@ -818,18 +864,28 @@ async function loadCalendar() {
 async function loadScheduleNote() {
   if (!scheduleNote) return;
 
-  const note = await loadLocalData("adminScheduleNoteData", initialSiteData.scheduleNote);
-  const bodyHtml = sanitizeRichText(note?.bodyHtml || "");
+  const note = normalizeScheduleNoteData(await loadLocalData("adminScheduleNoteData", initialSiteData.scheduleNote));
   scheduleNote.replaceChildren();
-  scheduleNote.hidden = !hasRichTextContent(bodyHtml);
-  if (!hasRichTextContent(bodyHtml)) return;
+  scheduleNote.hidden = !note.boxes.length;
+  if (!note.boxes.length) return;
 
-  const content = document.createElement("div");
-  content.className = "schedule-note-content";
-  content.style.minHeight = `${Math.max(80, Math.min(800, Number(note.height) || 180))}px`;
-  content.style.fontSize = `${Math.max(12, Math.min(34, Number(note.fontSize) || 16))}px`;
-  content.innerHTML = bodyHtml;
-  scheduleNote.append(content);
+  const board = document.createElement("div");
+  board.className = "schedule-note-board";
+  board.style.minHeight = `${note.height}px`;
+
+  note.boxes.forEach((box) => {
+    const item = document.createElement("article");
+    item.className = "schedule-note-box";
+    item.style.left = `${box.x}%`;
+    item.style.top = `${box.y}%`;
+    item.style.width = `${box.width}%`;
+    item.style.minHeight = `${box.height}px`;
+    item.style.fontSize = `${box.fontSize}px`;
+    item.innerHTML = box.bodyHtml;
+    board.append(item);
+  });
+
+  scheduleNote.append(board);
 }
 
 prevMonthButton?.addEventListener("click", () => {
@@ -2344,6 +2400,185 @@ function createNewsAdmin(news) {
   return form;
 }
 
+function createScheduleBoxAdmin(scheduleNoteData, status) {
+  const state = normalizeScheduleNoteData(scheduleNoteData);
+  const wrap = document.createElement("div");
+  wrap.className = "schedule-box-admin";
+
+  const boardHeight = createAdminInput("number", state.height);
+  boardHeight.min = "180";
+  boardHeight.max = "1000";
+  boardHeight.step = "20";
+
+  const controls = document.createElement("div");
+  controls.className = "schedule-box-controls";
+  const addButton = createActionButton("Textfeld hinzufügen", "form-button");
+  const saveButton = createActionButton("Textfelder speichern", "form-button");
+  controls.append(addButton, saveButton);
+
+  const preview = document.createElement("div");
+  preview.className = "schedule-box-preview";
+
+  const list = document.createElement("div");
+  list.className = "schedule-box-list";
+
+  let rows = [];
+
+  const readRows = (options = {}) => ({
+    height: clampNumber(boardHeight.value, 180, 1000, 420),
+    boxes: rows
+      .map((row, index) => createScheduleBox({
+        id: row.id,
+        bodyHtml: row.editor.getHtml(),
+        x: row.x.value,
+        y: row.y.value,
+        width: row.width.value,
+        height: row.height.value,
+        fontSize: row.fontSize.value,
+      }, index))
+      .filter((box) => options.keepEmpty || hasRichTextContent(box.bodyHtml)),
+  });
+
+  const saveScheduleBoxes = () => {
+    setStoredJson("adminScheduleNoteData", readRows());
+    refreshAfterAdminSave(status, "Textfelder gespeichert.");
+  };
+
+  const syncPreviewBox = (previewBox, row) => {
+    const width = clampNumber(row.width.value, 12, 100, 44);
+    const x = clampNumber(row.x.value, 0, 100 - width, 0);
+    row.x.value = Math.round(x);
+    previewBox.style.left = `${x}%`;
+    previewBox.style.top = `${clampNumber(row.y.value, 0, 100, 0)}%`;
+    previewBox.style.width = `${width}%`;
+    previewBox.style.minHeight = `${clampNumber(row.height.value, 60, 600, 150) * 0.5}px`;
+    previewBox.style.fontSize = `${clampNumber(row.fontSize.value, 12, 34, 16) * 0.78}px`;
+  };
+
+  const render = (nextState = readRows({ keepEmpty: true })) => {
+    rows = [];
+    preview.replaceChildren();
+    list.replaceChildren();
+    boardHeight.value = nextState.height;
+    preview.style.minHeight = `${Math.max(220, nextState.height * 0.55)}px`;
+
+    nextState.boxes.forEach((box, index) => {
+      const row = {
+        id: box.id,
+        editor: createRichTextEditor(box.bodyHtml, { height: 120 }),
+        x: createAdminInput("number", box.x),
+        y: createAdminInput("number", box.y),
+        width: createAdminInput("number", box.width),
+        height: createAdminInput("number", box.height),
+        fontSize: createAdminInput("number", box.fontSize),
+      };
+
+      row.x.min = "0";
+      row.x.max = "100";
+      row.x.step = "1";
+      row.y.min = "0";
+      row.y.max = "100";
+      row.y.step = "1";
+      row.width.min = "12";
+      row.width.max = "100";
+      row.width.step = "1";
+      row.height.min = "60";
+      row.height.max = "600";
+      row.height.step = "10";
+      row.fontSize.min = "12";
+      row.fontSize.max = "34";
+      row.fontSize.step = "1";
+      rows.push(row);
+
+      const previewBox = document.createElement("article");
+      previewBox.className = "schedule-preview-box";
+      previewBox.textContent = `Textfeld ${index + 1}`;
+      syncPreviewBox(previewBox, row);
+
+      let dragStart = null;
+      previewBox.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        previewBox.setPointerCapture(event.pointerId);
+        dragStart = {
+          pointerX: event.clientX,
+          pointerY: event.clientY,
+          x: Number(row.x.value) || 0,
+          y: Number(row.y.value) || 0,
+          width: preview.clientWidth || 1,
+          height: preview.clientHeight || 1,
+        };
+        previewBox.classList.add("is-dragging");
+      });
+      previewBox.addEventListener("pointermove", (event) => {
+        if (!dragStart) return;
+        const nextX = dragStart.x + ((event.clientX - dragStart.pointerX) / dragStart.width) * 100;
+        const nextY = dragStart.y + ((event.clientY - dragStart.pointerY) / dragStart.height) * 100;
+        row.x.value = Math.round(clampNumber(nextX, 0, 100, 0));
+        row.y.value = Math.round(clampNumber(nextY, 0, 100, 0));
+        syncPreviewBox(previewBox, row);
+      });
+      previewBox.addEventListener("pointerup", () => {
+        dragStart = null;
+        previewBox.classList.remove("is-dragging");
+      });
+      preview.append(previewBox);
+
+      const card = document.createElement("div");
+      card.className = "schedule-box-card";
+      const cardHead = document.createElement("div");
+      cardHead.className = "schedule-box-card-head";
+      const title = document.createElement("h5");
+      title.textContent = `Textfeld ${index + 1}`;
+      const removeButton = createActionButton("Löschen", "admin-remove-button");
+      removeButton.addEventListener("click", () => {
+        const next = readRows({ keepEmpty: true });
+        next.boxes.splice(index, 1);
+        render(next);
+      });
+      cardHead.append(title, removeButton);
+
+      const metrics = document.createElement("div");
+      metrics.className = "schedule-box-metrics";
+      metrics.append(
+        createAdminField("X", row.x),
+        createAdminField("Y", row.y),
+        createAdminField("Breite %", row.width),
+        createAdminField("Höhe", row.height),
+        createAdminField("Schriftgröße", row.fontSize)
+      );
+      [row.x, row.y, row.width, row.height, row.fontSize].forEach((input) => {
+        input.addEventListener("input", () => syncPreviewBox(previewBox, row));
+      });
+
+      card.append(cardHead, createAdminField("Text", row.editor.element), metrics);
+      list.append(card);
+    });
+  };
+
+  addButton.addEventListener("click", () => {
+    const next = readRows({ keepEmpty: true });
+    next.boxes.push(createScheduleBox({
+      bodyHtml: "<p>Neues Textfeld</p>",
+      x: 5 + next.boxes.length * 4,
+      y: 6 + next.boxes.length * 5,
+      width: 44,
+      height: 140,
+      fontSize: 16,
+    }, next.boxes.length));
+    render(next);
+  });
+  saveButton.addEventListener("click", saveScheduleBoxes);
+
+  wrap.append(
+    createAdminField("Board Höhe", boardHeight),
+    controls,
+    preview,
+    list
+  );
+  render(state);
+  return wrap;
+}
+
 function createCalendarAdmin(events, scheduleNoteData = initialSiteData.scheduleNote) {
   const form = document.createElement("form");
   form.className = "admin-form";
@@ -2351,23 +2586,12 @@ function createCalendarAdmin(events, scheduleNoteData = initialSiteData.schedule
   const time = createAdminInput("time");
   const title = createAdminInput();
   const noteTitle = document.createElement("h4");
-  noteTitle.textContent = "Custom Textfeld unter Schedule";
-  const noteEditor = createRichTextEditor(scheduleNoteData?.bodyHtml || "", {
-    height: scheduleNoteData?.height || 180,
-  });
-  const noteHeight = createAdminInput("number", scheduleNoteData?.height || 180);
-  noteHeight.min = "80";
-  noteHeight.max = "800";
-  noteHeight.step = "10";
-  const noteFontSize = createAdminInput("number", scheduleNoteData?.fontSize || 16);
-  noteFontSize.min = "12";
-  noteFontSize.max = "34";
-  noteFontSize.step = "1";
-  const noteSaveButton = createActionButton("Textfeld speichern", "form-button");
+  noteTitle.textContent = "Custom Textfelder unter Schedule";
   const listTitle = document.createElement("h4");
   listTitle.textContent = "Vorhandene Termine";
   const status = document.createElement("p");
   status.className = "form-status";
+  const scheduleBoxAdmin = createScheduleBoxAdmin(scheduleNoteData, status);
   const entries = createAdminList(
     events.map((item, index) => {
       const remove = createActionButton("Löschen", "admin-remove-button");
@@ -2385,15 +2609,6 @@ function createCalendarAdmin(events, scheduleNoteData = initialSiteData.schedule
     "Noch keine Termine gespeichert."
   );
 
-  noteSaveButton.addEventListener("click", () => {
-    setStoredJson("adminScheduleNoteData", {
-      bodyHtml: noteEditor.getHtml(),
-      height: Math.max(80, Math.min(800, Number(noteHeight.value) || 180)),
-      fontSize: Math.max(12, Math.min(34, Number(noteFontSize.value) || 16)),
-    });
-    refreshAfterAdminSave(status, "Textfeld gespeichert.");
-  });
-
   form.append(
     createAdminField("Datum", date),
     createAdminField("Uhrzeit", time),
@@ -2402,10 +2617,7 @@ function createCalendarAdmin(events, scheduleNoteData = initialSiteData.schedule
     listTitle,
     entries,
     noteTitle,
-    createAdminField("Text", noteEditor.element),
-    createAdminField("Höhe", noteHeight),
-    createAdminField("Schriftgröße", noteFontSize),
-    noteSaveButton,
+    scheduleBoxAdmin,
     status
   );
 

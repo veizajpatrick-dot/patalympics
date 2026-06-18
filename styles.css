@@ -338,12 +338,12 @@ h1 {
 }
 
 .news-body p,
-.schedule-note-content p {
+.schedule-note-box p {
   margin: 0 0 0.8em;
 }
 
 .news-body p:last-child,
-.schedule-note-content p:last-child {
+.schedule-note-box p:last-child {
   margin-bottom: 0;
 }
 
@@ -363,14 +363,23 @@ h1 {
   padding: 16px;
 }
 
-.schedule-note-content {
+.schedule-note-board {
+  position: relative;
+  overflow: hidden;
+}
+
+.schedule-note-box {
+  position: absolute;
   overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(255, 250, 241, 0.12);
+  background: rgba(10, 7, 16, 0.34);
   color: rgba(255, 250, 241, 0.8);
   line-height: 1.6;
 }
 
-.schedule-note-content ul,
-.schedule-note-content ol,
+.schedule-note-box ul,
+.schedule-note-box ol,
 .news-body ul,
 .news-body ol {
   margin: 0.4em 0 0.8em 1.2em;
@@ -1163,6 +1172,84 @@ h1 {
   margin: 0 0 0.8em;
 }
 
+.schedule-box-admin {
+  display: grid;
+  gap: 12px;
+}
+
+.schedule-box-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.schedule-box-preview {
+  position: relative;
+  overflow: hidden;
+  min-height: 240px;
+  border: 1px dashed rgba(255, 250, 241, 0.18);
+  background:
+    linear-gradient(rgba(255, 250, 241, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 250, 241, 0.04) 1px, transparent 1px),
+    rgba(10, 7, 16, 0.28);
+  background-size: 32px 32px;
+}
+
+.schedule-preview-box {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  min-height: 52px;
+  padding: 8px;
+  border: 1px solid rgba(245, 191, 105, 0.55);
+  background: rgba(138, 53, 255, 0.28);
+  color: var(--white);
+  font-weight: 900;
+  text-align: center;
+  cursor: grab;
+  user-select: none;
+}
+
+.schedule-preview-box.is-dragging {
+  cursor: grabbing;
+  border-color: var(--sand);
+  background: rgba(138, 53, 255, 0.44);
+}
+
+.schedule-box-list {
+  display: grid;
+  gap: 12px;
+}
+
+.schedule-box-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  background: rgba(18, 11, 29, 0.34);
+}
+
+.schedule-box-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.schedule-box-card-head h5 {
+  margin: 0;
+  color: var(--sand);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.schedule-box-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .poll-admin-form {
   gap: 10px;
 }
@@ -1509,6 +1596,10 @@ h1 {
 @media (max-width: 760px) {
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  .schedule-box-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
 }

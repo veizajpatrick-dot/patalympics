@@ -449,7 +449,7 @@ insert into public.site_content (key, value)
 values
   ('adminNewsData', '[]'::jsonb),
   ('adminCalendarData', '[]'::jsonb),
-  ('adminScheduleNoteData', '{"bodyHtml":"","height":180,"fontSize":16}'::jsonb),
+  ('adminScheduleNoteData', '{"height":420,"boxes":[]}'::jsonb),
   ('adminPollData', '{
     "availability": { "published": false, "info": "", "startDate": "", "endDate": "" },
     "suggestions": { "published": false, "info": "" },
