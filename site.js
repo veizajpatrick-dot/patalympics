@@ -1,6 +1,7 @@
 const newsList = document.querySelector("#news-list");
 const calendarGrid = document.querySelector("#calendar-grid");
 const calendarTitle = document.querySelector("#calendar-title");
+const scheduleNote = document.querySelector("#schedule-note");
 const prevMonthButton = document.querySelector("#prev-month");
 const nextMonthButton = document.querySelector("#next-month");
 const rankingPanel = document.querySelector(".ranking-panel");
@@ -51,6 +52,7 @@ const supabaseEnabled = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
 const initialSiteData = {
   news: [],
   calendar: [],
+  scheduleNote: { bodyHtml: "", height: 180, fontSize: 16 },
   polls: {
     availability: { published: false, info: "", startDate: "", endDate: "" },
     suggestions: { published: false, info: "" },
@@ -537,6 +539,144 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function plainTextToHtml(value = "") {
+  return String(value)
+    .split(/\n+/)
+    .map((line) => `<p>${line.replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#039;",
+    })[char]) || "<br>"}</p>`)
+    .join("");
+}
+
+function sanitizeRichText(value = "") {
+  const wrap = document.createElement("div");
+  wrap.innerHTML = String(value);
+  wrap.querySelectorAll("script, style, iframe, object, embed, link, meta").forEach((element) => element.remove());
+
+  wrap.querySelectorAll("*").forEach((element) => {
+    [...element.attributes].forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      if (name.startsWith("on") || name === "href" || name === "src") {
+        element.removeAttribute(attribute.name);
+        return;
+      }
+
+      if (name === "style") {
+        const fontSize = element.style.fontSize;
+        const textAlign = element.style.textAlign;
+        element.removeAttribute("style");
+        if (/^\d{1,2}px$/.test(fontSize)) element.style.fontSize = fontSize;
+        if (/^(left|center|right)$/i.test(textAlign)) element.style.textAlign = textAlign;
+        return;
+      }
+
+      if (!["class"].includes(name)) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+  });
+
+  return wrap.innerHTML;
+}
+
+function normalizeEditorHtml(value = "") {
+  const wrap = document.createElement("div");
+  wrap.innerHTML = value;
+  const sizeMap = {
+    1: "12px",
+    2: "14px",
+    3: "16px",
+    4: "18px",
+    5: "22px",
+    6: "26px",
+    7: "32px",
+  };
+
+  wrap.querySelectorAll("font[size]").forEach((font) => {
+    const span = document.createElement("span");
+    span.style.fontSize = sizeMap[font.getAttribute("size")] || "16px";
+    span.innerHTML = font.innerHTML;
+    font.replaceWith(span);
+  });
+
+  return sanitizeRichText(wrap.innerHTML);
+}
+
+function getRichBodyHtml(item) {
+  return sanitizeRichText(item?.bodyHtml || plainTextToHtml(item?.body || ""));
+}
+
+function hasRichTextContent(value = "") {
+  const wrap = document.createElement("div");
+  wrap.innerHTML = sanitizeRichText(value);
+  return wrap.textContent.replace(/\u00a0/g, " ").trim().length > 0;
+}
+
+function createRichTextEditor(value = "", options = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "rich-editor";
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "rich-editor-toolbar";
+
+  const editor = document.createElement("div");
+  editor.className = "rich-editor-area";
+  editor.contentEditable = "true";
+  editor.innerHTML = sanitizeRichText(value);
+  editor.style.minHeight = `${Math.max(90, Number(options.height) || 150)}px`;
+
+  const runCommand = (command, commandValue = null) => {
+    editor.focus();
+    document.execCommand(command, false, commandValue);
+  };
+
+  [
+    ["B", "bold"],
+    ["I", "italic"],
+    ["U", "underline"],
+    ["•", "insertUnorderedList"],
+    ["1.", "insertOrderedList"],
+    ["L", "justifyLeft"],
+    ["M", "justifyCenter"],
+    ["R", "justifyRight"],
+  ].forEach(([label, command]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", () => runCommand(command));
+    toolbar.append(button);
+  });
+
+  const sizeSelect = document.createElement("select");
+  [
+    ["3", "16"],
+    ["2", "14"],
+    ["4", "18"],
+    ["5", "22"],
+    ["6", "26"],
+    ["7", "32"],
+  ].forEach(([valueOption, label]) => {
+    const option = document.createElement("option");
+    option.value = valueOption;
+    option.textContent = `${label}px`;
+    sizeSelect.append(option);
+  });
+  sizeSelect.addEventListener("change", () => runCommand("fontSize", sizeSelect.value));
+  toolbar.append(sizeSelect);
+
+  wrap.append(toolbar, editor);
+
+  return {
+    element: wrap,
+    getHtml: () => normalizeEditorHtml(editor.innerHTML),
+    editor,
+  };
+}
+
 function createNewsItem(item) {
   const article = document.createElement("article");
   article.className = "news-item";
@@ -548,9 +688,9 @@ function createNewsItem(item) {
   const title = document.createElement("h2");
   title.textContent = item.title;
 
-  const body = document.createElement("p");
+  const body = document.createElement("div");
   body.className = "news-body";
-  body.textContent = item.body;
+  body.innerHTML = getRichBodyHtml(item);
 
   if (meta.textContent) article.append(meta);
   article.append(title, body);
@@ -572,7 +712,7 @@ async function loadNews() {
     if (!publishedItems.length) {
       const empty = document.createElement("p");
       empty.className = "empty-state";
-      empty.textContent = "Noch keine News veröffentlicht.";
+      empty.textContent = "Noch keine Rules veröffentlicht.";
       newsList.append(empty);
       return;
     }
@@ -581,7 +721,7 @@ async function loadNews() {
   } catch {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "News konnten nicht geladen werden.";
+    empty.textContent = "Rules konnten nicht geladen werden.";
     newsList.replaceChildren(empty);
   }
 }
@@ -670,9 +810,26 @@ async function loadCalendar() {
     calendarGrid.replaceChildren();
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "Kalender konnte nicht geladen werden.";
+    empty.textContent = "Schedule konnte nicht geladen werden.";
     calendarGrid.append(empty);
   }
+}
+
+async function loadScheduleNote() {
+  if (!scheduleNote) return;
+
+  const note = await loadLocalData("adminScheduleNoteData", initialSiteData.scheduleNote);
+  const bodyHtml = sanitizeRichText(note?.bodyHtml || "");
+  scheduleNote.replaceChildren();
+  scheduleNote.hidden = !hasRichTextContent(bodyHtml);
+  if (!hasRichTextContent(bodyHtml)) return;
+
+  const content = document.createElement("div");
+  content.className = "schedule-note-content";
+  content.style.minHeight = `${Math.max(80, Math.min(800, Number(note.height) || 180))}px`;
+  content.style.fontSize = `${Math.max(12, Math.min(34, Number(note.fontSize) || 16))}px`;
+  content.innerHTML = bodyHtml;
+  scheduleNote.append(content);
 }
 
 prevMonthButton?.addEventListener("click", () => {
@@ -686,6 +843,7 @@ nextMonthButton?.addEventListener("click", () => {
 });
 
 loadCalendar();
+loadScheduleNote();
 
 function getTrendSymbol(trend) {
   if (trend === "up") return "↑";
@@ -1908,6 +2066,7 @@ async function getAdminData() {
   return {
     news: await loadLocalData("adminNewsData", initialSiteData.news),
     calendar: await loadLocalData("adminCalendarData", initialSiteData.calendar),
+    scheduleNote: await loadLocalData("adminScheduleNoteData", initialSiteData.scheduleNote),
     polls: await loadLocalData("adminPollData", initialSiteData.polls),
     ranking: await loadLocalData("adminRankingData", initialSiteData.ranking),
     rankingArchive: await loadLocalData("adminRankingArchive", []),
@@ -2012,8 +2171,8 @@ async function renderAdminPanel(modalBody) {
   wrap.className = "admin-grid";
 
   wrap.append(
-    renderAdminSection("News", createNewsAdmin(data.news)),
-    renderAdminSection("Kalender", createCalendarAdmin(data.calendar)),
+    renderAdminSection("Rules", createNewsAdmin(data.news)),
+    renderAdminSection("Schedule", createCalendarAdmin(data.calendar, data.scheduleNote)),
     renderAdminSection("Polls", createPollAdmin(data.polls)),
     renderAdminSection("User", createUserAdmin(data.participants)),
     renderAdminSection("Rangliste", createRankingAdmin(data.ranking)),
@@ -2028,15 +2187,15 @@ function getInlineAdminConfig(data) {
 
   if (path.endsWith("/news.html")) {
     return {
-      title: "News bearbeiten",
+      title: "Rules bearbeiten",
       content: createNewsAdmin(data.news),
     };
   }
 
   if (path.endsWith("/kalender.html")) {
     return {
-      title: "Kalender bearbeiten",
-      content: createCalendarAdmin(data.calendar),
+      title: "Schedule bearbeiten",
+      content: createCalendarAdmin(data.calendar, data.scheduleNote),
     };
   }
 
@@ -2123,6 +2282,9 @@ async function refreshPageAdminState() {
   if (pollEmpty) {
     await loadPolls();
   }
+  await loadNews();
+  await loadCalendar();
+  await loadScheduleNote();
   await renderHallOfFame();
   await renderUserPage();
 }
@@ -2131,10 +2293,9 @@ function createNewsAdmin(news) {
   const form = document.createElement("form");
   form.className = "admin-form";
   const title = createAdminInput();
-  const author = createAdminInput("text", "Admin");
-  const body = createAdminTextarea("", 4);
+  const bodyEditor = createRichTextEditor("", { height: 180 });
   const listTitle = document.createElement("h4");
-  listTitle.textContent = "Vorhandene News";
+  listTitle.textContent = "Vorhandene Rules";
   const status = document.createElement("p");
   status.className = "form-status";
   const entries = createAdminList(
@@ -2143,22 +2304,21 @@ function createNewsAdmin(news) {
       remove.addEventListener("click", () => {
         const nextNews = news.filter((_, currentIndex) => currentIndex !== index);
         setStoredJson("adminNewsData", nextNews);
-        refreshAfterAdminSave(status, "News gelöscht.");
+        refreshAfterAdminSave(status, "Rule gelöscht.");
       });
       return createAdminEntry(
         item.title || "Ohne Titel",
-        [formatDate(item.date), item.author].filter(Boolean).join(" / "),
+        formatDate(item.date),
         remove
       );
     }),
-    "Noch keine News gespeichert."
+    "Noch keine Rules gespeichert."
   );
 
   form.append(
     createAdminField("Titel", title),
-    createAdminField("Autor", author),
-    createAdminField("Text", body),
-    createAdminButton("News speichern"),
+    createAdminField("Text", bodyEditor.element),
+    createAdminButton("Rule speichern"),
     listTitle,
     entries,
     status
@@ -2169,27 +2329,41 @@ function createNewsAdmin(news) {
     const nextNews = [
       {
         title: title.value.trim(),
-        author: author.value.trim(),
-        body: body.value.trim(),
+        author: "Admin",
+        bodyHtml: bodyEditor.getHtml(),
         date: new Date().toISOString().slice(0, 10),
         published: true,
       },
       ...news,
-    ].filter((item) => item.title && item.body);
+    ].filter((item) => item.title && hasRichTextContent(getRichBodyHtml(item)));
 
     setStoredJson("adminNewsData", nextNews);
-    refreshAfterAdminSave(status, "News gespeichert.");
+    refreshAfterAdminSave(status, "Rule gespeichert.");
   });
 
   return form;
 }
 
-function createCalendarAdmin(events) {
+function createCalendarAdmin(events, scheduleNoteData = initialSiteData.scheduleNote) {
   const form = document.createElement("form");
   form.className = "admin-form";
   const date = createAdminInput("date");
   const time = createAdminInput("time");
   const title = createAdminInput();
+  const noteTitle = document.createElement("h4");
+  noteTitle.textContent = "Custom Textfeld unter Schedule";
+  const noteEditor = createRichTextEditor(scheduleNoteData?.bodyHtml || "", {
+    height: scheduleNoteData?.height || 180,
+  });
+  const noteHeight = createAdminInput("number", scheduleNoteData?.height || 180);
+  noteHeight.min = "80";
+  noteHeight.max = "800";
+  noteHeight.step = "10";
+  const noteFontSize = createAdminInput("number", scheduleNoteData?.fontSize || 16);
+  noteFontSize.min = "12";
+  noteFontSize.max = "34";
+  noteFontSize.step = "1";
+  const noteSaveButton = createActionButton("Textfeld speichern", "form-button");
   const listTitle = document.createElement("h4");
   listTitle.textContent = "Vorhandene Termine";
   const status = document.createElement("p");
@@ -2211,6 +2385,15 @@ function createCalendarAdmin(events) {
     "Noch keine Termine gespeichert."
   );
 
+  noteSaveButton.addEventListener("click", () => {
+    setStoredJson("adminScheduleNoteData", {
+      bodyHtml: noteEditor.getHtml(),
+      height: Math.max(80, Math.min(800, Number(noteHeight.value) || 180)),
+      fontSize: Math.max(12, Math.min(34, Number(noteFontSize.value) || 16)),
+    });
+    refreshAfterAdminSave(status, "Textfeld gespeichert.");
+  });
+
   form.append(
     createAdminField("Datum", date),
     createAdminField("Uhrzeit", time),
@@ -2218,6 +2401,11 @@ function createCalendarAdmin(events) {
     createAdminButton("Termin speichern"),
     listTitle,
     entries,
+    noteTitle,
+    createAdminField("Text", noteEditor.element),
+    createAdminField("Höhe", noteHeight),
+    createAdminField("Schriftgröße", noteFontSize),
+    noteSaveButton,
     status
   );
 
