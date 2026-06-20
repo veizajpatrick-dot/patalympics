@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Patalympics</title>
-    <link rel="stylesheet" href="styles.css?v=20260618-8" />
+    <link rel="stylesheet" href="styles.css?v=20260619-3" />
   </head>
   <body>
     <header class="site-header" aria-label="Hauptnavigation">
@@ -24,12 +24,9 @@
 
     <main>
       <section class="hero" aria-labelledby="hero-title">
-        <img
-          class="hero-bg"
-          src="assets/patalympics-banner.png?v=20260618-8"
-          alt=""
-          aria-hidden="true"
-        />
+        <video class="hero-bg" autoplay muted loop playsinline poster="assets/patalympics-banner.png?v=20260619-3" aria-hidden="true">
+          <source src="assets/patalympics-home-loop.mp4?v=20260619-3" type="video/mp4" />
+        </video>
         <div class="hero-shade"></div>
 
         <div class="hero-content">
@@ -37,7 +34,12 @@
         </div>
       </section>
     </main>
-    <script src="supabase-config.js?v=20260618-8"></script>
-    <script src="site.js?v=20260618-8"></script>
+    <script>
+      document.querySelector(".hero-bg")?.addEventListener("loadedmetadata", (event) => {
+        event.currentTarget.playbackRate = 0.65;
+      });
+    </script>
+    <script src="supabase-config.js?v=20260619-3"></script>
+    <script src="site.js?v=20260619-3"></script>
   </body>
 </html>
