@@ -463,7 +463,9 @@ values
     ],
     "players": []
   }'::jsonb),
-  ('adminHallOfFameData', '[]'::jsonb)
+  ('adminHallOfFameData', '[]'::jsonb),
+  ('adminSponsorData', '[]'::jsonb),
+  ('adminShopData', '[]'::jsonb)
 on conflict (key) do nothing;
 
 insert into public.admin_users (user_id, email, login_name)

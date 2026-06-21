@@ -8,6 +8,8 @@ const rankingPanel = document.querySelector(".ranking-panel");
 const rankingHead = document.querySelector("#ranking-head");
 const rankingBody = document.querySelector("#ranking-body");
 const hallList = document.querySelector("#hall-list");
+const sponsorList = document.querySelector("#sponsor-list");
+const shopList = document.querySelector("#shop-list");
 const pollEmpty = document.querySelector("#poll-empty");
 const availabilityPoll = document.querySelector("#availability-poll");
 const availabilityInfo = document.querySelector("#availability-info");
@@ -73,6 +75,8 @@ const initialSiteData = {
     players: [],
   },
   hallOfFame: [],
+  sponsors: [],
+  shop: [],
 };
 
 function getSupabaseProjectUrl() {
@@ -1199,6 +1203,89 @@ async function renderHallOfFame() {
 
 renderHallOfFame();
 
+function createSponsorItem(entry) {
+  const figure = document.createElement("figure");
+  figure.className = "sponsor-item";
+
+  const image = document.createElement("img");
+  image.src = entry.image.trim();
+  image.alt = entry.name?.trim() || "Sponsor";
+  image.loading = "lazy";
+  figure.append(image);
+
+  return figure;
+}
+
+async function renderSponsors() {
+  if (!sponsorList) return;
+
+  const items = await loadLocalData("adminSponsorData", initialSiteData.sponsors);
+  const entries = (Array.isArray(items) ? items : [])
+    .filter((entry) => entry.published !== false && entry.image?.trim());
+
+  sponsorList.replaceChildren();
+
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state sponsor-empty";
+    empty.textContent = "Noch keine Sponsoren eingetragen.";
+    sponsorList.append(empty);
+    return;
+  }
+
+  sponsorList.append(...entries.map(createSponsorItem));
+}
+
+renderSponsors();
+
+function createShopItem(entry) {
+  const figure = document.createElement("figure");
+  figure.className = "shop-item";
+
+  const image = document.createElement("img");
+  image.src = entry.image.trim();
+  image.alt = entry.name?.trim() || "Shop";
+  image.loading = "lazy";
+
+  const caption = document.createElement("figcaption");
+  const name = document.createElement("span");
+  name.className = "shop-item-name";
+  name.textContent = entry.name?.trim() || "Shop";
+  caption.append(name);
+
+  if (entry.price?.trim()) {
+    const price = document.createElement("strong");
+    price.className = "shop-item-price";
+    price.textContent = entry.price.trim();
+    caption.append(price);
+  }
+
+  figure.append(image, caption);
+  return figure;
+}
+
+async function renderShop() {
+  if (!shopList) return;
+
+  const items = await loadLocalData("adminShopData", initialSiteData.shop);
+  const entries = (Array.isArray(items) ? items : [])
+    .filter((entry) => entry.published !== false && entry.image?.trim());
+
+  shopList.replaceChildren();
+
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state shop-empty";
+    empty.textContent = "Noch keine Shop-Inhalte eingetragen.";
+    shopList.append(empty);
+    return;
+  }
+
+  shopList.append(...entries.map(createShopItem));
+}
+
+renderShop();
+
 function getRankingArchiveEntry(archive, archiveId) {
   if (!archiveId || !Array.isArray(archive)) return null;
   return archive.find((entry) => entry.id === archiveId || entry.createdAt === archiveId) ?? null;
@@ -2127,6 +2214,8 @@ async function getAdminData() {
     ranking: await loadLocalData("adminRankingData", initialSiteData.ranking),
     rankingArchive: await loadLocalData("adminRankingArchive", []),
     hallOfFame: await loadLocalData("adminHallOfFameData", initialSiteData.hallOfFame),
+    sponsors: await loadLocalData("adminSponsorData", initialSiteData.sponsors),
+    shop: await loadLocalData("adminShopData", initialSiteData.shop),
     participants: await loadRemoteParticipants(),
   };
 }
@@ -2232,7 +2321,9 @@ async function renderAdminPanel(modalBody) {
     renderAdminSection("Polls", createPollAdmin(data.polls)),
     renderAdminSection("User", createUserAdmin(data.participants)),
     renderAdminSection("Rangliste", createRankingAdmin(data.ranking)),
-    renderAdminSection("Hall of Fame", createHallOfFameAdmin(data.hallOfFame, data.rankingArchive))
+    renderAdminSection("Hall of Fame", createHallOfFameAdmin(data.hallOfFame, data.rankingArchive)),
+    renderAdminSection("Sponsoren", createSponsorAdmin(data.sponsors)),
+    renderAdminSection("Shop", createShopAdmin(data.shop))
   );
 
   modalBody.append(wrap);
@@ -2273,6 +2364,20 @@ function getInlineAdminConfig(data) {
     return {
       title: "Hall of Fame bearbeiten",
       content: createHallOfFameAdmin(data.hallOfFame, data.rankingArchive),
+    };
+  }
+
+  if (path.endsWith("/sponsoren.html")) {
+    return {
+      title: "Sponsoren bearbeiten",
+      content: createSponsorAdmin(data.sponsors),
+    };
+  }
+
+  if (path.endsWith("/shop.html")) {
+    return {
+      title: "Shop bearbeiten",
+      content: createShopAdmin(data.shop),
     };
   }
 
@@ -2342,6 +2447,8 @@ async function refreshPageAdminState() {
   await loadCalendar();
   await loadScheduleNote();
   await renderHallOfFame();
+  await renderSponsors();
+  await renderShop();
   await renderUserPage();
 }
 
@@ -2702,6 +2809,115 @@ function createHallOfFameAdmin(items = [], rankingArchive = []) {
 
     setStoredJson("adminHallOfFameData", nextItems);
     refreshAfterAdminSave(status, "Hall-of-Fame-Eintrag gespeichert.");
+  });
+
+  return form;
+}
+
+function createSponsorAdmin(items = []) {
+  const sponsorItems = Array.isArray(items) ? items : [];
+  const form = document.createElement("form");
+  form.className = "admin-form";
+  const name = createAdminInput("text");
+  const image = createAdminInput("text", "assets/sponsor.png");
+  const listTitle = document.createElement("h4");
+  listTitle.textContent = "Vorhandene Sponsoren";
+  const status = document.createElement("p");
+  status.className = "form-status";
+  const entries = createAdminList(
+    sponsorItems.map((item, index) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        const nextItems = sponsorItems.filter((_, currentIndex) => currentIndex !== index);
+        setStoredJson("adminSponsorData", nextItems);
+        refreshAfterAdminSave(status, "Sponsor gelöscht.");
+      });
+      return createAdminEntry(
+        item.name || "Ohne Name",
+        item.image || "Kein PNG",
+        remove
+      );
+    }),
+    "Noch keine Sponsoren gespeichert."
+  );
+
+  form.append(
+    createAdminField("Name", name),
+    createAdminField("PNG-Pfad", image),
+    createAdminButton("Sponsor speichern"),
+    listTitle,
+    entries,
+    status
+  );
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nextItem = {
+      name: name.value.trim(),
+      image: image.value.trim(),
+      published: true,
+      createdAt: new Date().toISOString(),
+    };
+    const nextItems = [...sponsorItems, nextItem].filter((item) => item.image?.trim());
+
+    setStoredJson("adminSponsorData", nextItems);
+    refreshAfterAdminSave(status, "Sponsor gespeichert.");
+  });
+
+  return form;
+}
+
+function createShopAdmin(items = []) {
+  const shopItems = Array.isArray(items) ? items : [];
+  const form = document.createElement("form");
+  form.className = "admin-form";
+  const name = createAdminInput("text");
+  const price = createAdminInput("text", "15 €");
+  const image = createAdminInput("text", "assets/shop.png");
+  const listTitle = document.createElement("h4");
+  listTitle.textContent = "Vorhandene Shop-Einträge";
+  const status = document.createElement("p");
+  status.className = "form-status";
+  const entries = createAdminList(
+    shopItems.map((item, index) => {
+      const remove = createActionButton("Löschen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        const nextItems = shopItems.filter((_, currentIndex) => currentIndex !== index);
+        setStoredJson("adminShopData", nextItems);
+        refreshAfterAdminSave(status, "Shop-Eintrag gelöscht.");
+      });
+      return createAdminEntry(
+        item.name || "Ohne Name",
+        [item.price || "Kein Preis", item.image || "Kein PNG"].join(" · "),
+        remove
+      );
+    }),
+    "Noch keine Shop-Einträge gespeichert."
+  );
+
+  form.append(
+    createAdminField("Name", name),
+    createAdminField("Preis", price),
+    createAdminField("PNG-Pfad", image),
+    createAdminButton("Shop-Eintrag speichern"),
+    listTitle,
+    entries,
+    status
+  );
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nextItem = {
+      name: name.value.trim(),
+      price: price.value.trim(),
+      image: image.value.trim(),
+      published: true,
+      createdAt: new Date().toISOString(),
+    };
+    const nextItems = [...shopItems, nextItem].filter((item) => item.image?.trim());
+
+    setStoredJson("adminShopData", nextItems);
+    refreshAfterAdminSave(status, "Shop-Eintrag gespeichert.");
   });
 
   return form;

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Patalympics</title>
-    <link rel="stylesheet" href="styles.css?v=20260619-3" />
+    <link rel="stylesheet" href="styles.css?v=20260621-12" />
   </head>
   <body>
     <header class="site-header" aria-label="Hauptnavigation">
@@ -14,23 +14,50 @@
       </a>
 
       <nav class="main-nav" aria-label="Seiten">
+        <a class="nav-home active" href="index.html" aria-label="Home">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 10.8 9-7 9 7" />
+            <path d="M5.5 9.5V20h13V9.5" />
+            <path d="M9.5 20v-6h5v6" />
+          </svg>
+        </a>
         <a href="news.html">Rules</a>
         <a href="kalender.html">Schedule</a>
         <a href="rangliste.html">Rangliste</a>
         <a href="poll.html">Poll</a>
         <a href="hall-of-fame.html">Hall of Fame</a>
+        <a href="sponsoren.html">Sponsoren</a>
+        <a href="shop.html">Shop</a>
       </nav>
     </header>
 
-    <main>
+    <main class="home-main">
       <section class="hero" aria-labelledby="hero-title">
-        <video class="hero-bg" autoplay muted loop playsinline poster="assets/patalympics-banner.png?v=20260619-3" aria-hidden="true">
-          <source src="assets/patalympics-home-loop.mp4?v=20260619-3" type="video/mp4" />
+        <video class="hero-bg" autoplay muted loop playsinline poster="assets/patalympics-banner.png?v=20260621-12" aria-hidden="true">
+          <source src="assets/patalympics-home-loop.mp4?v=20260621-12" type="video/mp4" />
         </video>
         <div class="hero-shade"></div>
 
         <div class="hero-content">
           <h1 id="hero-title">Patalympics</h1>
+        </div>
+
+        <a class="scroll-cue" href="#hosted-by" aria-label="Weiter scrollen">
+          <svg aria-hidden="true" viewBox="0 0 120 32" fill="none">
+            <path d="M8 8l52 16L112 8" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </a>
+      </section>
+
+      <section id="hosted-by" class="hosted-by-section reveal-section" aria-label="Hosted by">
+        <div class="hosted-by-frame">
+          <img class="hosted-by-image" src="assets/hosted-by-design.png?v=20260621-12" alt="Hosted by" />
+        </div>
+      </section>
+
+      <section class="trophy-showcase-section reveal-section" aria-label="Hosted by Trophy">
+        <div class="trophy-showcase-frame">
+          <img class="trophy-showcase-image" src="assets/hosted-by-trophy.png?v=20260621-12" alt="Patalympics Sommer 2026 Trophy" />
         </div>
       </section>
     </main>
@@ -38,8 +65,24 @@
       document.querySelector(".hero-bg")?.addEventListener("loadedmetadata", (event) => {
         event.currentTarget.playbackRate = 0.65;
       });
+
+      const revealSections = document.querySelectorAll(".reveal-section");
+      if (revealSections.length) {
+        if ("IntersectionObserver" in window) {
+          const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add("is-visible");
+              }
+            });
+          }, { threshold: 0.18 });
+          revealSections.forEach((section) => revealObserver.observe(section));
+        } else {
+          revealSections.forEach((section) => section.classList.add("is-visible"));
+        }
+      }
     </script>
-    <script src="supabase-config.js?v=20260619-3"></script>
-    <script src="site.js?v=20260619-3"></script>
+    <script src="supabase-config.js?v=20260621-12"></script>
+    <script src="site.js?v=20260621-12"></script>
   </body>
 </html>
