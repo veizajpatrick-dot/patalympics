@@ -82,6 +82,34 @@ const initialSiteData = {
   shop: [],
 };
 
+const imageAssetOptions = [
+  "assets/boxer.png",
+  "assets/Center_Shock_Mystery.jpg",
+  "assets/china.png",
+  "assets/energy.png",
+  "assets/energy_ohne_zucker.png",
+  "assets/hall-of-fame-2025-sommer.png",
+  "assets/hosted-by-design.png",
+  "assets/hosted-by-trophy.png",
+  "assets/jacket_schwarz.png",
+  "assets/jacket_weiß.png",
+  "assets/jogger_schwarz.png",
+  "assets/jogger__weiß.png",
+  "assets/kkk.png",
+  "assets/mousepad2025schamp.png",
+  "assets/mousepad2026s.png",
+  "assets/pantie.png",
+  "assets/patalympics-banner.png",
+  "assets/Patalympics_Cap.png",
+  "assets/Patalympics_Ricehat.png",
+  "assets/pepe.png",
+  "assets/ratiopharm.png",
+  "assets/rente.jpg",
+  "assets/Teletubbies.jpg",
+  "assets/tshirt_schwarz.png",
+  "assets/tshirt_weiß.png",
+];
+
 function getSupabaseProjectUrl() {
   return supabaseConfig.url
     .replace(/\/rest\/v1\/?$/i, "")
@@ -2598,6 +2626,32 @@ function createAdminInput(type = "text", value = "") {
   return input;
 }
 
+function createAdminAssetSelect(value = "") {
+  const select = document.createElement("select");
+  const normalizedValue = value.trim();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Bild auswählen";
+  select.append(placeholder);
+
+  if (normalizedValue && !imageAssetOptions.includes(normalizedValue)) {
+    const currentOption = document.createElement("option");
+    currentOption.value = normalizedValue;
+    currentOption.textContent = `Aktuell: ${normalizedValue}`;
+    select.append(currentOption);
+  }
+
+  imageAssetOptions.forEach((assetPath) => {
+    const option = document.createElement("option");
+    option.value = assetPath;
+    option.textContent = assetPath.replace(/^assets\//, "");
+    select.append(option);
+  });
+
+  select.value = normalizedValue;
+  return select;
+}
+
 function createAdminTextarea(value = "", rows = 5) {
   const textarea = document.createElement("textarea");
   textarea.rows = rows;
@@ -3201,7 +3255,7 @@ function createHallOfFameAdmin(items = [], rankingArchive = []) {
   form.className = "admin-form";
   const title = createAdminInput("text", "Patalympische Sommer Games 2025");
   const winner = createAdminInput("text", "Pat und Ryu");
-  const image = createAdminInput("text", "assets/hall-of-fame-2025.png");
+  const image = createAdminAssetSelect("assets/hall-of-fame-2025-sommer.png");
   const archiveSelect = document.createElement("select");
   const noArchiveOption = document.createElement("option");
   noArchiveOption.value = "";
@@ -3268,7 +3322,7 @@ function createSponsorAdmin(items = []) {
   const form = document.createElement("form");
   form.className = "admin-form";
   const name = createAdminInput("text");
-  const image = createAdminInput("text", "assets/sponsor.png");
+  const image = createAdminAssetSelect();
   const listTitle = document.createElement("h4");
   listTitle.textContent = "Vorhandene Sponsoren";
   const status = document.createElement("p");
@@ -3292,7 +3346,7 @@ function createSponsorAdmin(items = []) {
 
   form.append(
     createAdminField("Name", name),
-    createAdminField("PNG-Pfad", image),
+    createAdminField("Bild", image),
     createAdminButton("Sponsor speichern"),
     listTitle,
     entries,
@@ -3322,7 +3376,7 @@ function createShopAdmin(items = []) {
   form.className = "admin-form";
   const name = createAdminInput("text");
   const price = createAdminInput("text", "15 €");
-  const image = createAdminInput("text", "assets/shop.png");
+  const image = createAdminAssetSelect();
   const listTitle = document.createElement("h4");
   listTitle.textContent = "Vorhandene Merch-Einträge";
   const status = document.createElement("p");
@@ -3350,7 +3404,7 @@ function createShopAdmin(items = []) {
       });
       const editName = createAdminInput("text", item.name || "");
       const editPrice = createAdminInput("text", item.price || "");
-      const editImage = createAdminInput("text", item.image || "");
+      const editImage = createAdminAssetSelect(item.image || "");
       const editActions = document.createElement("div");
       editActions.className = "shop-admin-actions";
       const save = createActionButton("Änderung speichern", "admin-secondary-button");
@@ -3382,7 +3436,7 @@ function createShopAdmin(items = []) {
       editor.append(
         createAdminField("Name", editName),
         createAdminField("Preis", editPrice),
-        createAdminField("PNG-Pfad", editImage),
+        createAdminField("Bild", editImage),
         editActions
       );
       details.append(summary, editor);
@@ -3394,7 +3448,7 @@ function createShopAdmin(items = []) {
   form.append(
     createAdminField("Name", name),
     createAdminField("Preis", price),
-    createAdminField("PNG-Pfad", image),
+    createAdminField("Bild", image),
     createAdminButton("Merch-Eintrag speichern"),
     listTitle,
     entries,
