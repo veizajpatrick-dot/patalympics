@@ -1693,13 +1693,13 @@ function createShopItem(entry) {
 
   const image = document.createElement("img");
   image.src = entry.image.trim();
-  image.alt = entry.name?.trim() || "Shop";
+  image.alt = entry.name?.trim() || "Merch";
   image.loading = "lazy";
 
   const caption = document.createElement("figcaption");
   const name = document.createElement("span");
   name.className = "shop-item-name";
-  name.textContent = entry.name?.trim() || "Shop";
+  name.textContent = entry.name?.trim() || "Merch";
   caption.append(name);
 
   if (entry.price?.trim()) {
@@ -1725,7 +1725,7 @@ async function renderShop() {
   if (!entries.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state shop-empty";
-    empty.textContent = "Noch keine Shop-Inhalte eingetragen.";
+    empty.textContent = "Noch keine Merch-Inhalte eingetragen.";
     shopList.append(empty);
     return;
   }
@@ -2772,7 +2772,7 @@ async function renderAdminPanel(modalBody) {
     renderAdminSection("Rangliste", createRankingAdmin(data.ranking)),
     renderAdminSection("Hall of Fame", createHallOfFameAdmin(data.hallOfFame, data.rankingArchive)),
     renderAdminSection("Sponsoren", createSponsorAdmin(data.sponsors)),
-    renderAdminSection("Shop", createShopAdmin(data.shop))
+    renderAdminSection("Merch", createShopAdmin(data.shop))
   );
 
   modalBody.append(wrap);
@@ -2825,7 +2825,7 @@ function getInlineAdminConfig(data) {
 
   if (path.endsWith("/shop.html")) {
     return {
-      title: "Shop bearbeiten",
+      title: "Merch bearbeiten",
       content: createShopAdmin(data.shop),
     };
   }
@@ -3324,13 +3324,30 @@ function createShopAdmin(items = []) {
   const price = createAdminInput("text", "15 €");
   const image = createAdminInput("text", "assets/shop.png");
   const listTitle = document.createElement("h4");
-  listTitle.textContent = "Vorhandene Shop-Einträge";
+  listTitle.textContent = "Vorhandene Merch-Einträge";
   const status = document.createElement("p");
   status.className = "form-status";
   const entries = createAdminList(
     shopItems.map((item, index) => {
+      const details = document.createElement("details");
+      details.className = "shop-admin-entry";
+      const summary = document.createElement("summary");
+      const title = document.createElement("span");
+      title.className = "shop-admin-entry-title";
+      title.textContent = item.name?.trim() || `Merch-Item ${index + 1}`;
+      const meta = document.createElement("span");
+      meta.className = "shop-admin-entry-meta";
+      meta.textContent = item.price?.trim() || "Kein Preis";
+      const action = document.createElement("span");
+      action.className = "shop-admin-entry-action";
+      action.textContent = "Bearbeiten";
+      summary.append(title, meta, action);
+
       const editor = document.createElement("div");
-      editor.className = "admin-mini-card shop-admin-editor";
+      editor.className = "shop-admin-editor";
+      editor.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") event.preventDefault();
+      });
       const editName = createAdminInput("text", item.name || "");
       const editPrice = createAdminInput("text", item.price || "");
       const editImage = createAdminInput("text", item.image || "");
@@ -3353,12 +3370,12 @@ function createShopAdmin(items = []) {
           .filter((currentItem) => currentItem.image?.trim());
 
         setStoredJson("adminShopData", nextItems);
-        refreshAfterAdminSave(status, "Shop-Eintrag aktualisiert.");
+        refreshAfterAdminSave(status, "Merch-Eintrag aktualisiert.");
       });
       remove.addEventListener("click", () => {
         const nextItems = shopItems.filter((_, currentIndex) => currentIndex !== index);
         setStoredJson("adminShopData", nextItems);
-        refreshAfterAdminSave(status, "Shop-Eintrag gelöscht.");
+        refreshAfterAdminSave(status, "Merch-Eintrag gelöscht.");
       });
 
       editActions.append(save, remove);
@@ -3368,16 +3385,17 @@ function createShopAdmin(items = []) {
         createAdminField("PNG-Pfad", editImage),
         editActions
       );
-      return editor;
+      details.append(summary, editor);
+      return details;
     }),
-    "Noch keine Shop-Einträge gespeichert."
+    "Noch keine Merch-Einträge gespeichert."
   );
 
   form.append(
     createAdminField("Name", name),
     createAdminField("Preis", price),
     createAdminField("PNG-Pfad", image),
-    createAdminButton("Shop-Eintrag speichern"),
+    createAdminButton("Merch-Eintrag speichern"),
     listTitle,
     entries,
     status
@@ -3395,7 +3413,7 @@ function createShopAdmin(items = []) {
     const nextItems = [...shopItems, nextItem].filter((item) => item.image?.trim());
 
     setStoredJson("adminShopData", nextItems);
-    refreshAfterAdminSave(status, "Shop-Eintrag gespeichert.");
+    refreshAfterAdminSave(status, "Merch-Eintrag gespeichert.");
   });
 
   return form;

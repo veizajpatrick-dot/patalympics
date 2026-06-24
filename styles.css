@@ -477,8 +477,9 @@ h1 {
   margin: 0 auto;
 }
 
+.sponsor-panel,
 .shop-panel {
-  width: min(1120px, 100%);
+  width: min(1260px, 100%);
 }
 
 .sponsor-title,
@@ -490,6 +491,15 @@ h1 {
   line-height: 1;
   text-transform: uppercase;
   text-shadow: none;
+}
+
+.sponsor-title {
+  width: min(940px, 100%);
+  margin: 0 auto 42px;
+  color: var(--white);
+  font-size: clamp(1.45rem, 3vw, 2.65rem);
+  line-height: 1.12;
+  text-align: center;
 }
 
 .sponsor-grid,
@@ -523,20 +533,30 @@ h1 {
   align-content: start;
 }
 
+.sponsor-grid,
 .shop-grid {
-  grid-template-columns: repeat(3, minmax(0, 300px));
-  gap: 48px 42px;
+  grid-template-columns: repeat(3, minmax(0, 390px));
+  gap: 32px 24px;
   align-items: start;
 }
 
+.sponsor-item,
 .shop-item {
-  width: 300px;
-  min-height: 224px;
+  width: 390px;
 }
 
+.sponsor-item {
+  min-height: 248px;
+}
+
+.shop-item {
+  min-height: 308px;
+}
+
+.sponsor-item img,
 .shop-item img {
-  max-width: 300px;
-  max-height: 178px;
+  max-width: 390px;
+  max-height: 248px;
 }
 
 .shop-item figcaption {
@@ -548,7 +568,7 @@ h1 {
 
 .shop-item-name {
   color: rgba(255, 250, 241, 0.82);
-  font-size: 0.72rem;
+  font-size: 0.88rem;
   font-weight: 900;
   line-height: 1.1;
   text-transform: uppercase;
@@ -556,7 +576,7 @@ h1 {
 
 .shop-item-price {
   color: var(--sand);
-  font-size: 0.92rem;
+  font-size: 1.12rem;
   font-weight: 900;
   line-height: 1.1;
 }
@@ -1807,13 +1827,69 @@ h1 {
 }
 
 .shop-admin-editor {
+  display: grid;
   gap: 10px;
+  padding: 10px;
+  border-top: 1px solid rgba(255, 250, 241, 0.08);
 }
 
 .shop-admin-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.shop-admin-entry {
+  overflow: hidden;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  background: rgba(18, 11, 29, 0.42);
+}
+
+.shop-admin-entry summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.shop-admin-entry summary::-webkit-details-marker {
+  display: none;
+}
+
+.shop-admin-entry-title {
+  min-width: 0;
+  color: var(--white);
+  font-size: 0.86rem;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-admin-entry-meta {
+  color: var(--sand);
+  font-size: 0.76rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.shop-admin-entry-action {
+  min-width: 86px;
+  padding: 8px 10px;
+  border: 1px solid rgba(245, 191, 105, 0.34);
+  color: var(--sand);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.shop-admin-entry[open] .shop-admin-entry-action {
+  background: rgba(245, 191, 105, 0.14);
 }
 
 .admin-check-list {
@@ -2375,56 +2451,49 @@ h1 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sponsor-grid {
-    grid-template-columns: repeat(2, 160px);
+  .sponsor-grid,
+  .shop-grid {
+    grid-template-columns: repeat(2, minmax(0, 300px));
     justify-content: center;
-    gap: 30px;
+    gap: 24px 18px;
+  }
+
+  .sponsor-item,
+  .shop-item {
+    width: 300px;
   }
 
   .sponsor-item {
-    width: 160px;
-    min-height: 92px;
-  }
-
-  .sponsor-item img {
-    max-width: 160px;
-    max-height: 92px;
-  }
-
-  .shop-grid {
-    grid-template-columns: repeat(2, minmax(0, 220px));
-    justify-content: center;
-    gap: 32px 24px;
+    min-height: 188px;
   }
 
   .shop-item {
-    width: 220px;
-    min-height: 174px;
+    min-height: 236px;
   }
 
+  .sponsor-item img,
   .shop-item img {
-    max-width: 220px;
-    max-height: 132px;
+    max-width: 300px;
+    max-height: 188px;
   }
 
 }
 
 @media (max-width: 420px) {
-  .sponsor-grid {
-    grid-template-columns: 180px;
-  }
-
+  .sponsor-grid,
   .shop-grid {
-    grid-template-columns: minmax(0, 260px);
+    grid-template-columns: minmax(0, min(320px, 100%));
   }
 
+  .sponsor-item,
   .shop-item {
-    width: 260px;
+    width: min(320px, 100%);
   }
 
+  .sponsor-item img,
   .shop-item img {
-    max-width: 260px;
-    max-height: 156px;
+    max-width: 100%;
+    max-height: 202px;
   }
 }
 
