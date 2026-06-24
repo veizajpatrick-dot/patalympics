@@ -477,6 +477,10 @@ h1 {
   margin: 0 auto;
 }
 
+.shop-panel {
+  width: min(1120px, 100%);
+}
+
 .sponsor-title,
 .shop-title {
   margin: 0 0 26px;
@@ -517,6 +521,22 @@ h1 {
 .shop-item {
   gap: 12px;
   align-content: start;
+}
+
+.shop-grid {
+  grid-template-columns: repeat(3, minmax(0, 300px));
+  gap: 48px 42px;
+  align-items: start;
+}
+
+.shop-item {
+  width: 300px;
+  min-height: 224px;
+}
+
+.shop-item img {
+  max-width: 300px;
+  max-height: 178px;
 }
 
 .shop-item figcaption {
@@ -1786,6 +1806,16 @@ h1 {
   background: rgba(18, 11, 29, 0.42);
 }
 
+.shop-admin-editor {
+  gap: 10px;
+}
+
+.shop-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .admin-check-list {
   display: grid;
   gap: 10px;
@@ -2345,31 +2375,56 @@ h1 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sponsor-grid,
-  .shop-grid {
+  .sponsor-grid {
     grid-template-columns: repeat(2, 160px);
     justify-content: center;
     gap: 30px;
   }
 
-  .sponsor-item,
-  .shop-item {
+  .sponsor-item {
     width: 160px;
     min-height: 92px;
   }
 
-  .sponsor-item img,
-  .shop-item img {
+  .sponsor-item img {
     max-width: 160px;
     max-height: 92px;
+  }
+
+  .shop-grid {
+    grid-template-columns: repeat(2, minmax(0, 220px));
+    justify-content: center;
+    gap: 32px 24px;
+  }
+
+  .shop-item {
+    width: 220px;
+    min-height: 174px;
+  }
+
+  .shop-item img {
+    max-width: 220px;
+    max-height: 132px;
   }
 
 }
 
 @media (max-width: 420px) {
-  .sponsor-grid,
-  .shop-grid {
+  .sponsor-grid {
     grid-template-columns: 180px;
+  }
+
+  .shop-grid {
+    grid-template-columns: minmax(0, 260px);
+  }
+
+  .shop-item {
+    width: 260px;
+  }
+
+  .shop-item img {
+    max-width: 260px;
+    max-height: 156px;
   }
 }
 

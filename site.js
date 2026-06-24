@@ -3329,17 +3329,46 @@ function createShopAdmin(items = []) {
   status.className = "form-status";
   const entries = createAdminList(
     shopItems.map((item, index) => {
+      const editor = document.createElement("div");
+      editor.className = "admin-mini-card shop-admin-editor";
+      const editName = createAdminInput("text", item.name || "");
+      const editPrice = createAdminInput("text", item.price || "");
+      const editImage = createAdminInput("text", item.image || "");
+      const editActions = document.createElement("div");
+      editActions.className = "shop-admin-actions";
+      const save = createActionButton("Änderung speichern", "admin-secondary-button");
       const remove = createActionButton("Löschen", "admin-remove-button");
+      save.addEventListener("click", () => {
+        const nextItems = shopItems
+          .map((currentItem, currentIndex) => currentIndex === index
+            ? {
+              ...currentItem,
+              name: editName.value.trim(),
+              price: editPrice.value.trim(),
+              image: editImage.value.trim(),
+              published: currentItem.published !== false,
+              updatedAt: new Date().toISOString(),
+            }
+            : currentItem)
+          .filter((currentItem) => currentItem.image?.trim());
+
+        setStoredJson("adminShopData", nextItems);
+        refreshAfterAdminSave(status, "Shop-Eintrag aktualisiert.");
+      });
       remove.addEventListener("click", () => {
         const nextItems = shopItems.filter((_, currentIndex) => currentIndex !== index);
         setStoredJson("adminShopData", nextItems);
         refreshAfterAdminSave(status, "Shop-Eintrag gelöscht.");
       });
-      return createAdminEntry(
-        item.name || "Ohne Name",
-        [item.price || "Kein Preis", item.image || "Kein PNG"].join(" · "),
-        remove
+
+      editActions.append(save, remove);
+      editor.append(
+        createAdminField("Name", editName),
+        createAdminField("Preis", editPrice),
+        createAdminField("PNG-Pfad", editImage),
+        editActions
       );
+      return editor;
     }),
     "Noch keine Shop-Einträge gespeichert."
   );
