@@ -7,6 +7,7 @@ const nextMonthButton = document.querySelector("#next-month");
 const rankingPanel = document.querySelector(".ranking-panel");
 const rankingHead = document.querySelector("#ranking-head");
 const rankingBody = document.querySelector("#ranking-body");
+const rankingBracket = document.querySelector("#ranking-bracket");
 const hallList = document.querySelector("#hall-list");
 const sponsorList = document.querySelector("#sponsor-list");
 const shopList = document.querySelector("#shop-list");
@@ -62,6 +63,8 @@ const initialSiteData = {
   },
   ranking: {
     mode: "solo",
+    bracketEnabled: false,
+    bracketResults: {},
     days: [
       {
         label: "Day 1",
@@ -908,7 +911,7 @@ loadScheduleNote();
 function getTrendSymbol(trend) {
   if (trend === "up") return "↑";
   if (trend === "down") return "↓";
-  return "";
+  return "→";
 }
 
 function createCell(value, className = "", tagName = "td") {
@@ -1086,7 +1089,10 @@ function createRankingRow(player, index, columns, mode = "solo") {
   trend.textContent = hasPlayerName ? getTrendSymbol(player.trend) : "";
   const placeNumber = document.createElement("span");
   placeNumber.textContent = place;
-  placeCell.replaceChildren(trend, placeNumber);
+  const placeContent = document.createElement("span");
+  placeContent.className = "place-content";
+  placeContent.append(trend, placeNumber);
+  placeCell.replaceChildren(placeContent);
   if (place === 1) placeCell.classList.add("gold");
   if (place === 2) placeCell.classList.add("silver");
   if (place === 3) placeCell.classList.add("bronze");
@@ -1110,6 +1116,446 @@ function createRankingRow(player, index, columns, mode = "solo") {
   return row;
 }
 
+function createBracketTeams(players, mode = "solo") {
+  return Array.from({ length: 5 }, (_, teamIndex) => {
+    const members = players.slice(teamIndex * 2, teamIndex * 2 + 2);
+    const names = members.flatMap((player) => getPlayerDisplayNames(player, mode));
+
+    return {
+      seed: teamIndex + 1,
+      label: names[0] || `Platz ${teamIndex * 2 + 1}`,
+      names,
+    };
+  });
+}
+
+function createBracketSlot(label, detail = "", modifier = "", seed = "", scoreControl = null, lines = []) {
+  const slot = document.createElement("div");
+  slot.className = ["bracket-slot", modifier].filter(Boolean).join(" ");
+  if (seed !== "") {
+    const seedLabel = document.createElement("span");
+    seedLabel.className = "bracket-slot-seed";
+    seedLabel.textContent = seed;
+    slot.append(seedLabel);
+  } else {
+    slot.classList.add("no-seed");
+  }
+
+  const content = document.createElement("span");
+  content.className = "bracket-slot-content";
+  const name = document.createElement("span");
+  name.className = "bracket-slot-name";
+  if (lines.length) {
+    lines.forEach((lineText) => {
+      const line = document.createElement("span");
+      line.textContent = lineText;
+      name.append(line);
+    });
+  } else {
+    name.textContent = label;
+  }
+  content.append(name);
+
+  if (detail) {
+    const meta = document.createElement("span");
+    meta.className = "bracket-slot-meta";
+    meta.textContent = detail;
+    content.append(meta);
+  }
+
+  slot.append(content);
+  if (scoreControl) slot.append(scoreControl);
+  return slot;
+}
+
+function createTeamSlot(team, modifier = "") {
+  const names = team.names.length ? team.names : ["Noch offen"];
+  return createBracketSlot(names[0], "", modifier || (team.names.length ? "" : "is-open"), team.seed, null, names);
+}
+
+function createPlaceholderSlot(label) {
+  return {
+    label,
+    names: [],
+    pending: true,
+  };
+}
+
+function isPendingBracketSlot(slot) {
+  return !slot || slot.pending;
+}
+
+function getBracketSlotDetail(slot) {
+  if (!slot) return "Noch offen";
+  if (slot.names?.length) return slot.names.join(" / ");
+  return slot.pending ? "Noch offen" : "";
+}
+
+function createBracketSlotControl(match, slot, slotIndex, isAdmin) {
+  const result = match.result?.scores ?? ["", ""];
+  const rawValue = result[slotIndex] ?? "";
+  const advantage = match.advantage?.[slotIndex] ?? 0;
+  const value = rawValue === "" || rawValue === null || Number.isNaN(Number(rawValue)) ? "" : Number(rawValue);
+  const effectiveValue = (value === "" ? 0 : value) + advantage;
+
+  if (!isAdmin) {
+    if (value === "" && !advantage) return null;
+    const score = document.createElement("span");
+    score.className = "bracket-score";
+    score.textContent = advantage ? `${effectiveValue}` : `${value}`;
+    if (advantage) score.title = `${advantage}:0 Vorteil eingerechnet`;
+    return score;
+  }
+
+  const wrap = document.createElement("label");
+  wrap.className = "bracket-score-control";
+  if (advantage) {
+    const bonus = document.createElement("span");
+    bonus.className = "bracket-score-bonus";
+    bonus.textContent = `+${advantage}`;
+    wrap.append(bonus);
+  }
+
+  const input = createAdminInput("number", value);
+  input.min = "0";
+  input.max = match.bestOf === 5 ? "5" : "3";
+  input.step = "1";
+  input.disabled = !match.ready;
+  input.dataset.bracketScore = match.id;
+  input.dataset.side = slotIndex;
+  input.setAttribute("aria-label", `${match.code} Score ${slotIndex + 1}`);
+  wrap.append(input);
+  return wrap;
+}
+
+function createBracketSlotFromEntry(match, slot, slotIndex, isAdmin) {
+  const modifier = [
+    isPendingBracketSlot(slot) ? "is-open" : "",
+    match.advantage?.[slotIndex] ? "free-win" : "",
+    match.winnerIndex === slotIndex ? "is-winner" : "",
+  ].filter(Boolean).join(" ");
+  const scoreControl = createBracketSlotControl(match, slot, slotIndex, isAdmin);
+  return createBracketSlot(
+    slot?.label ?? "Noch offen",
+    slot?.names?.length ? "" : getBracketSlotDetail(slot),
+    modifier,
+    slot?.seed ?? "",
+    scoreControl,
+    slot?.names?.length ? slot.names : []
+  );
+}
+
+function normalizeBracketResults(results) {
+  return results && typeof results === "object" && !Array.isArray(results) ? results : {};
+}
+
+function getBracketResult(results, matchId) {
+  const result = results?.[matchId];
+  const scores = Array.isArray(result?.scores) ? result.scores : ["", ""];
+  return {
+    scores: [scores[0] ?? "", scores[1] ?? ""],
+  };
+}
+
+function getBracketWinnerIndex(match) {
+  if (!match.ready) return null;
+  const scores = match.result?.scores ?? ["", ""];
+  if (scores[0] === "" || scores[1] === "") return null;
+
+  const target = match.bestOf === 5 ? 3 : 2;
+  const scoreA = Number(scores[0] || 0) + (match.advantage?.[0] ?? 0);
+  const scoreB = Number(scores[1] || 0) + (match.advantage?.[1] ?? 0);
+  if (scoreA === scoreB) return null;
+  if (scoreA >= target && scoreA > scoreB) return 0;
+  if (scoreB >= target && scoreB > scoreA) return 1;
+  return null;
+}
+
+function hydrateBracketMatch(match, results) {
+  const result = getBracketResult(results, match.id);
+  const ready = match.slots.every((slot) => !isPendingBracketSlot(slot));
+  const hydrated = {
+    ...match,
+    result,
+    ready,
+  };
+  const winnerIndex = getBracketWinnerIndex(hydrated);
+  return {
+    ...hydrated,
+    winnerIndex,
+    winner: winnerIndex === null ? null : hydrated.slots[winnerIndex],
+    loser: winnerIndex === null ? null : hydrated.slots[winnerIndex === 0 ? 1 : 0],
+  };
+}
+
+function buildBracketState(teams, results) {
+  const safeResults = normalizeBracketResults(results);
+  const wb1 = hydrateBracketMatch({
+    id: "wb1",
+    code: "WB1",
+    title: "Play-In",
+    bestOf: 3,
+    slots: [teams[3], teams[4]],
+  }, safeResults);
+  const wb2 = hydrateBracketMatch({
+    id: "wb2",
+    code: "WB2",
+    title: "Round 2",
+    bestOf: 3,
+    slots: [teams[0], wb1.winner ?? createPlaceholderSlot("Sieger WB1")],
+  }, safeResults);
+  const wb3 = hydrateBracketMatch({
+    id: "wb3",
+    code: "WB3",
+    title: "Round 2",
+    bestOf: 3,
+    slots: [teams[1], teams[2]],
+  }, safeResults);
+  const wbf = hydrateBracketMatch({
+    id: "wbf",
+    code: "WB-Finale",
+    title: "Winner Final",
+    bestOf: 5,
+    slots: [wb2.winner ?? createPlaceholderSlot("Sieger WB2"), wb3.winner ?? createPlaceholderSlot("Sieger WB3")],
+  }, safeResults);
+  const lb1 = hydrateBracketMatch({
+    id: "lb1",
+    code: "LB1",
+    title: "Lower Path",
+    bestOf: 3,
+    slots: [wb1.loser ?? createPlaceholderSlot("Verlierer WB1"), wb3.loser ?? createPlaceholderSlot("Verlierer WB3")],
+  }, safeResults);
+  const lb2 = hydrateBracketMatch({
+    id: "lb2",
+    code: "LB2",
+    title: "Lower Path",
+    bestOf: 3,
+    slots: [lb1.winner ?? createPlaceholderSlot("Sieger LB1"), wb2.loser ?? createPlaceholderSlot("Verlierer WB2")],
+  }, safeResults);
+  const lbf = hydrateBracketMatch({
+    id: "lbf",
+    code: "LB-Finale",
+    title: "Loser Final",
+    bestOf: 5,
+    slots: [lb2.winner ?? createPlaceholderSlot("Sieger LB2"), wbf.loser ?? createPlaceholderSlot("Verlierer WB-Finale")],
+  }, safeResults);
+  const gf = hydrateBracketMatch({
+    id: "gf",
+    code: "Grand Final",
+    title: "Finale",
+    bestOf: 5,
+    advantage: [1, 0],
+    slots: [wbf.winner ?? createPlaceholderSlot("Sieger WB-Finale"), lbf.winner ?? createPlaceholderSlot("Sieger LB-Finale")],
+  }, safeResults);
+
+  return {
+    wb1,
+    wb2,
+    wb3,
+    wbf,
+    lb1,
+    lb2,
+    lbf,
+    gf,
+  };
+}
+
+function readBracketResultsFromForm(form) {
+  const nextResults = {};
+  const inputsByMatch = {};
+
+  form.querySelectorAll("[data-bracket-score]").forEach((input) => {
+    if (input.disabled) return;
+    const matchId = input.dataset.bracketScore;
+    const side = Number(input.dataset.side || 0);
+    inputsByMatch[matchId] ??= ["", ""];
+    inputsByMatch[matchId][side] = input.value === "" ? "" : Number(input.value);
+  });
+
+  Object.entries(inputsByMatch).forEach(([matchId, scores]) => {
+    if (scores.every((score) => score === "")) {
+      delete nextResults[matchId];
+      return;
+    }
+    nextResults[matchId] = { scores };
+  });
+
+  return nextResults;
+}
+
+function createBracketMatch(code, title, format, slots, note = "", modifier = "") {
+  const match = document.createElement("article");
+  match.className = ["bracket-match", modifier].filter(Boolean).join(" ");
+  const head = document.createElement("div");
+  head.className = "bracket-match-head";
+  const codeLabel = document.createElement("span");
+  codeLabel.className = "bracket-match-code";
+  codeLabel.textContent = code;
+  const titleLabel = document.createElement("span");
+  titleLabel.className = "bracket-match-title";
+  titleLabel.textContent = title;
+  const formatLabel = document.createElement("span");
+  formatLabel.className = "bracket-format";
+  formatLabel.textContent = format;
+
+  head.append(codeLabel, titleLabel, formatLabel);
+  match.append(head, ...slots);
+
+  if (note) {
+    const noteText = document.createElement("p");
+    noteText.className = "bracket-note";
+    noteText.textContent = note;
+    match.append(noteText);
+  }
+
+  return match;
+}
+
+function createBracketNode(className, x, y, match) {
+  const node = document.createElement("div");
+  node.className = `bracket-node ${className}`;
+  node.style.setProperty("--x", `${x}px`);
+  node.style.setProperty("--y", `${y}px`);
+  node.append(match);
+  return node;
+}
+
+function createBracketStageLabel(text, x, y, modifier = "") {
+  const label = document.createElement("div");
+  label.className = ["bracket-stage-label", modifier].filter(Boolean).join(" ");
+  label.style.setProperty("--x", `${x}px`);
+  label.style.setProperty("--y", `${y}px`);
+  label.textContent = text;
+  return label;
+}
+
+function createBracketSvgPath(d, modifier = "") {
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.classList.add("bracket-svg-path");
+  if (modifier) path.classList.add(modifier);
+  path.setAttribute("d", d);
+  return path;
+}
+
+function createBracketSvg() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("bracket-svg");
+  svg.setAttribute("viewBox", "0 0 1180 620");
+  svg.setAttribute("aria-hidden", "true");
+  svg.append(
+    createBracketSvgPath("M260 184 H286 V178 H310"),
+    createBracketSvgPath("M530 134 H580 V230 H620"),
+    createBracketSvgPath("M530 334 H580 V278 H620"),
+    createBracketSvgPath("M840 254 H890 V230 H930"),
+    createBracketSvgPath("M260 494 H310"),
+    createBracketSvgPath("M530 494 H620"),
+    createBracketSvgPath("M840 494 H890 V278 H930", "is-lower")
+  );
+  return svg;
+}
+
+function renderRankingBracket(rankingData, players, mode = "solo") {
+  if (!rankingBracket) return;
+  rankingBracket.replaceChildren();
+
+  if (!rankingData.bracketEnabled) {
+    rankingBracket.hidden = true;
+    return;
+  }
+
+  const teams = createBracketTeams(players, mode);
+  const bracketResults = normalizeBracketResults(rankingData.bracketResults);
+  const bracketState = buildBracketState(teams, bracketResults);
+  const canEditBracket = isAdminLoggedIn();
+  const title = document.createElement("div");
+  title.className = "bracket-title-row";
+  const heading = document.createElement("h2");
+  heading.textContent = "Double Elimination Bracket";
+  const meta = document.createElement("p");
+  meta.textContent = "5 Teams - Team 1 hat ein Freilos - Finals BO5";
+  title.append(heading, meta);
+
+  const bracketStageWrap = document.createElement(canEditBracket ? "form" : "div");
+  bracketStageWrap.className = "bracket-stage-wrap";
+  const bracketStage = document.createElement("div");
+  bracketStage.className = "bracket-stage";
+  bracketStage.append(
+    createBracketSvg(),
+    createBracketStageLabel("Winner Path", 34, 28, "winner-path"),
+    createBracketStageLabel("Second Chance", 34, 382, "lower-path"),
+    createBracketStageLabel("Grand Final", 930, 128, "final-path"),
+    createBracketNode("node-wb1", 40, 118, createBracketMatch("WB1", "Play-In", "BO3", [
+      createBracketSlotFromEntry(bracketState.wb1, bracketState.wb1.slots[0], 0, canEditBracket),
+      createBracketSlotFromEntry(bracketState.wb1, bracketState.wb1.slots[1], 1, canEditBracket),
+    ], "", bracketState.wb1.winner ? "is-complete" : "")),
+    createBracketNode("node-wb2", 310, 68, createBracketMatch("WB2", "Round 2", "BO3", [
+      createBracketSlotFromEntry(bracketState.wb2, bracketState.wb2.slots[0], 0, canEditBracket),
+      createBracketSlotFromEntry(bracketState.wb2, bracketState.wb2.slots[1], 1, canEditBracket),
+    ], "", bracketState.wb2.winner ? "is-complete" : "")),
+    createBracketNode("node-wb3", 310, 268, createBracketMatch("WB3", "Round 2", "BO3", [
+      createBracketSlotFromEntry(bracketState.wb3, bracketState.wb3.slots[0], 0, canEditBracket),
+      createBracketSlotFromEntry(bracketState.wb3, bracketState.wb3.slots[1], 1, canEditBracket),
+    ], "", bracketState.wb3.winner ? "is-complete" : "")),
+    createBracketNode("node-wbf", 620, 168, createBracketMatch("WB-Finale", "Winner Final", "BO5", [
+      createBracketSlotFromEntry(bracketState.wbf, bracketState.wbf.slots[0], 0, canEditBracket),
+      createBracketSlotFromEntry(bracketState.wbf, bracketState.wbf.slots[1], 1, canEditBracket),
+    ], "", ["is-final", bracketState.wbf.winner ? "is-complete" : ""].filter(Boolean).join(" "))),
+    createBracketNode("node-lb1", 40, 428, createBracketMatch("LB1", "Lower Path", "BO3", [
+      createBracketSlotFromEntry(bracketState.lb1, bracketState.lb1.slots[0], 0, canEditBracket),
+      createBracketSlotFromEntry(bracketState.lb1, bracketState.lb1.slots[1], 1, canEditBracket),
+    ], "", bracketState.lb1.winner ? "is-complete" : "")),
+    createBracketNode("node-lb2", 310, 428, createBracketMatch("LB2", "Lower Path", "BO3", [
+      createBracketSlotFromEntry(bracketState.lb2, bracketState.lb2.slots[0], 0, canEditBracket),
+      createBracketSlotFromEntry(bracketState.lb2, bracketState.lb2.slots[1], 1, canEditBracket),
+    ], "", bracketState.lb2.winner ? "is-complete" : "")),
+    createBracketNode("node-lbf", 620, 428, createBracketMatch("LB-Finale", "Loser Final", "BO5", [
+      createBracketSlotFromEntry(bracketState.lbf, bracketState.lbf.slots[0], 0, canEditBracket),
+      createBracketSlotFromEntry(bracketState.lbf, bracketState.lbf.slots[1], 1, canEditBracket),
+    ], "", ["is-final", bracketState.lbf.winner ? "is-complete" : ""].filter(Boolean).join(" "))),
+    createBracketNode("node-gf", 930, 168, createBracketMatch("Grand Final", "Finale", "BO5", [
+      createBracketSlotFromEntry(bracketState.gf, bracketState.gf.slots[0], 0, canEditBracket),
+      createBracketSlotFromEntry(bracketState.gf, bracketState.gf.slots[1], 1, canEditBracket),
+    ], "", ["is-grand-final", bracketState.gf.winner ? "is-complete" : ""].filter(Boolean).join(" ")))
+  );
+
+  const stageLegend = document.createElement("div");
+  stageLegend.className = "bracket-stage-legend";
+  stageLegend.textContent = "Normale Spiele BO3 - Finals BO5 - kein Reset - Winner-Team startet im Grand Final mit 1:0";
+
+  bracketStageWrap.append(bracketStage, stageLegend);
+
+  if (canEditBracket) {
+    const status = document.createElement("p");
+    status.className = "form-status bracket-status";
+    const saveButton = createActionButton("Bracket speichern", "admin-secondary-button", "submit");
+    const resetButton = createActionButton("Bracket zurücksetzen", "admin-remove-button");
+    const actions = document.createElement("div");
+    actions.className = "bracket-admin-actions";
+    actions.append(saveButton, resetButton, status);
+
+    resetButton.addEventListener("click", () => {
+      const nextRanking = { ...rankingData, bracketResults: {} };
+      setStoredJson("adminRankingData", nextRanking);
+      refreshAfterAdminSave(status, "Bracket zurückgesetzt.");
+    });
+
+    bracketStageWrap.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const nextRanking = {
+        ...rankingData,
+        bracketResults: readBracketResultsFromForm(bracketStageWrap),
+      };
+      setStoredJson("adminRankingData", nextRanking);
+      refreshAfterAdminSave(status, "Bracket gespeichert.");
+    });
+
+    bracketStageWrap.append(actions);
+  }
+
+  rankingBracket.hidden = false;
+  rankingBracket.append(title, bracketStageWrap);
+}
+
 async function loadRanking() {
   if (!rankingHead || !rankingBody) return;
 
@@ -1127,14 +1573,17 @@ async function loadRanking() {
     if (!publishedPlayers.length) {
       rankingHead.replaceChildren();
       rankingPanel.hidden = true;
+      renderRankingBracket(rankingData, [], mode);
       return;
     }
 
     rankingPanel.hidden = false;
     rankingHead.replaceChildren(createRankingHeader(columns, mode));
     rankingBody.append(...publishedPlayers.map((player, index) => createRankingRow(player, index, columns, mode)));
+    renderRankingBracket(rankingData, publishedPlayers, mode);
   } catch {
     rankingPanel.hidden = false;
+    if (rankingBracket) rankingBracket.hidden = true;
     rankingBody.replaceChildren();
     const row = document.createElement("tr");
     const cell = document.createElement("td");
@@ -3223,6 +3672,9 @@ function createRankingAdmin(ranking) {
   duoOption.textContent = "Duo";
   mode.append(soloOption, duoOption);
   mode.value = ranking.mode ?? "solo";
+  const bracketEnabled = createAdminInput("checkbox");
+  bracketEnabled.checked = Boolean(ranking.bracketEnabled);
+  bracketEnabled.className = "ranking-bracket-toggle";
   const settings = document.createElement("div");
   settings.className = "ranking-settings";
   const tableArea = document.createElement("div");
@@ -3345,6 +3797,8 @@ function createRankingAdmin(ranking) {
     const archive = getStoredJson("adminRankingArchive", []);
     const currentRanking = {
       mode: mode.value,
+      bracketEnabled: bracketEnabled.checked,
+      bracketResults: ranking.bracketResults ?? {},
       days: buildDays(),
       players: readEditableTablePlayers(),
     };
@@ -3362,6 +3816,8 @@ function createRankingAdmin(ranking) {
   clearRankingButton.addEventListener("click", () => {
     const emptyRanking = {
       mode: "solo",
+      bracketEnabled: false,
+      bracketResults: {},
       days: buildDays(),
       players: [],
     };
@@ -3387,7 +3843,8 @@ function createRankingAdmin(ranking) {
     createAdminField("Anzahl Tage", dayCount),
     createAdminField("Spiele pro Tag", gamesPerDay),
     createAdminField("Teilnehmer", playerCount),
-    createAdminField("Modus", mode)
+    createAdminField("Modus", mode),
+    createAdminField("Double Elimination", bracketEnabled)
   );
 
   form.append(
@@ -3413,6 +3870,8 @@ function createRankingAdmin(ranking) {
     }
     const nextRanking = {
       mode: mode.value,
+      bracketEnabled: bracketEnabled.checked,
+      bracketResults: ranking.bracketResults ?? {},
       days: buildDays(),
       players: readEditableTablePlayers(),
     };

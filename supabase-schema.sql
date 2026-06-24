@@ -457,6 +457,8 @@ values
   }'::jsonb),
   ('adminRankingData', '{
     "mode": "solo",
+    "bracketEnabled": false,
+    "bracketResults": {},
     "days": [
       { "label": "Day 1", "games": ["Game 1", "Game 2", "Game 3", "Game 4", "Game 5"] },
       { "label": "Day 2", "games": ["Game 1", "Game 2", "Game 3", "Game 4", "Game 5"] }
