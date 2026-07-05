@@ -940,11 +940,16 @@ h1 {
 .calendar-grid {
   padding: 8px;
   gap: 3px;
+  grid-auto-rows: 104px;
 }
 
 .calendar-day {
-  min-height: 82px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
   padding: 7px;
+  overflow: hidden;
   border: 1px solid rgba(255, 250, 241, 0.08);
   background: rgba(255, 250, 241, 0.032);
 }
@@ -967,8 +972,17 @@ h1 {
   background: var(--sand);
 }
 
+.calendar-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
 .calendar-date {
   display: inline-grid;
+  flex: 0 0 auto;
   width: 24px;
   height: 24px;
   place-items: center;
@@ -978,20 +992,48 @@ h1 {
   font-weight: 900;
 }
 
+.calendar-time,
+.calendar-event-time {
+  color: var(--sand);
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.calendar-time {
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
 .calendar-events {
   display: grid;
-  gap: 4px;
-  margin-top: 7px;
+  align-content: start;
+  gap: 3px;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
 }
 
 .calendar-event {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
   margin: 0;
-  padding: 5px 6px;
-  border-left: 2px solid var(--sand);
-  background: rgba(18, 11, 29, 0.54);
+  padding: 4px 5px;
+  background: rgba(18, 11, 29, 0.46);
   color: rgba(255, 250, 241, 0.86);
   font-size: 0.74rem;
-  line-height: 1.25;
+  line-height: 1.2;
+}
+
+.calendar-event-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .ranking-panel {
@@ -2706,10 +2748,11 @@ h1 {
 
   .calendar-grid {
     overflow-x: auto;
+    grid-auto-rows: 94px;
   }
 
   .calendar-day {
-    min-height: 74px;
+    min-height: 0;
     padding: 6px;
   }
 

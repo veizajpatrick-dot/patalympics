@@ -864,19 +864,42 @@ function createCalendarDay(date, events) {
     day.classList.add("has-event");
   }
 
+  const sortedEvents = [...events].sort((a, b) => (a.time || "").localeCompare(b.time || "", "de-DE"));
+  const firstEventTime = sortedEvents[0]?.time?.trim() || "";
+  const head = document.createElement("div");
+  head.className = "calendar-day-head";
+
   const dateLabel = document.createElement("span");
   dateLabel.className = "calendar-date";
   dateLabel.textContent = String(date.getDate());
-  day.append(dateLabel);
+  head.append(dateLabel);
 
-  if (events.length) {
+  if (firstEventTime) {
+    const time = document.createElement("span");
+    time.className = "calendar-time";
+    time.textContent = firstEventTime;
+    head.append(time);
+  }
+
+  day.append(head);
+
+  if (sortedEvents.length) {
     const list = document.createElement("div");
     list.className = "calendar-events";
 
-    events.forEach((event) => {
-      const item = document.createElement("p");
+    sortedEvents.forEach((event, index) => {
+      const item = document.createElement("article");
       item.className = "calendar-event";
-      item.textContent = [event.time, event.title].filter(Boolean).join(" ");
+      if (index > 0 && event.time?.trim()) {
+        const time = document.createElement("span");
+        time.className = "calendar-event-time";
+        time.textContent = event.time.trim();
+        item.append(time);
+      }
+      const title = document.createElement("span");
+      title.className = "calendar-event-title";
+      title.textContent = event.title?.trim() || "Termin";
+      item.append(title);
       list.append(item);
     });
 
