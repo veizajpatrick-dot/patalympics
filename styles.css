@@ -1607,6 +1607,7 @@ h1 {
 }
 
 .simple-poll .section-head {
+  gap: 12px;
   min-height: 50px;
   padding: 0 16px;
 }
@@ -1616,6 +1617,77 @@ h1 {
   padding: 13px 16px 0;
   color: rgba(255, 250, 241, 0.76);
   font-size: 0.9rem;
+  white-space: pre-line;
+}
+
+.availability-fullscreen-button {
+  justify-self: end;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.72rem;
+}
+
+#availability-poll:fullscreen,
+#availability-poll.is-expanded {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  margin: 0;
+  padding: clamp(10px, 2vw, 24px);
+  overflow: auto;
+  border: 0;
+  background:
+    linear-gradient(180deg, rgba(32, 16, 51, 0.98), rgba(8, 5, 13, 0.99)),
+    var(--ink);
+}
+
+#availability-poll.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+#availability-poll:fullscreen .section-head,
+#availability-poll.is-expanded .section-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background:
+    linear-gradient(90deg, rgba(138, 53, 255, 0.72), rgba(255, 209, 102, 0.14)),
+    rgba(18, 11, 29, 0.94);
+}
+
+#availability-poll:fullscreen .poll-answer-form,
+#availability-poll.is-expanded .poll-answer-form {
+  gap: 16px;
+}
+
+#availability-poll:fullscreen .availability-scroll,
+#availability-poll.is-expanded .availability-scroll {
+  max-width: 100%;
+  padding-bottom: 10px;
+}
+
+#availability-poll:fullscreen .availability-matrix,
+#availability-poll.is-expanded .availability-matrix {
+  grid-template-columns: 120px repeat(var(--availability-columns), 104px);
+  gap: 5px;
+}
+
+#availability-poll:fullscreen .matrix-corner,
+#availability-poll:fullscreen .matrix-date,
+#availability-poll.is-expanded .matrix-corner,
+#availability-poll.is-expanded .matrix-date {
+  min-height: 54px;
+}
+
+#availability-poll:fullscreen .matrix-answer,
+#availability-poll:fullscreen .matrix-choice,
+#availability-poll:fullscreen .matrix-admin-count,
+#availability-poll.is-expanded .matrix-answer,
+#availability-poll.is-expanded .matrix-choice,
+#availability-poll.is-expanded .matrix-admin-count {
+  min-height: 42px;
 }
 
 .participant-dialog {
@@ -2103,6 +2175,7 @@ h1 {
   font-size: 0.78rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 
 .participant-admin-row {
@@ -2482,6 +2555,18 @@ h1 {
   color: rgba(255, 250, 241, 0.82);
   font-size: 0.8rem;
   line-height: 1.35;
+}
+
+.availability-saved-note {
+  display: grid;
+  gap: 5px;
+  white-space: pre-line;
+}
+
+.availability-saved-note strong {
+  color: var(--sand);
+  font-size: 0.74rem;
+  text-transform: uppercase;
 }
 
 .poll-result-voters {

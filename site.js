@@ -18,6 +18,7 @@ const availabilityForm = document.querySelector("#availability-form");
 const availabilityOptions = document.querySelector("#availability-options");
 const availabilityNote = document.querySelector("#availability-note");
 const availabilityStatus = document.querySelector("#availability-status");
+const availabilityFullscreenButton = document.querySelector("#availability-fullscreen");
 const suggestionPoll = document.querySelector("#suggestion-poll");
 const suggestionInfo = document.querySelector("#suggestion-info");
 const suggestionForm = document.querySelector("#suggestion-form");
@@ -1894,6 +1895,41 @@ function renderPollInfo(element, text) {
   element.hidden = !text?.trim();
 }
 
+function updateAvailabilityFullscreenButton() {
+  if (!availabilityFullscreenButton || !availabilityPoll) return;
+  const isFullscreen = document.fullscreenElement === availabilityPoll || availabilityPoll.classList.contains("is-expanded");
+  availabilityFullscreenButton.textContent = isFullscreen ? "Schließen" : "Fullscreen";
+}
+
+function closeAvailabilityExpandedView() {
+  if (!availabilityPoll) return;
+  availabilityPoll.classList.remove("is-expanded");
+  updateAvailabilityFullscreenButton();
+}
+
+async function toggleAvailabilityFullscreen() {
+  if (!availabilityPoll) return;
+
+  if (document.fullscreenElement === availabilityPoll) {
+    await document.exitFullscreen?.();
+    return;
+  }
+
+  if (availabilityPoll.requestFullscreen) {
+    try {
+      await availabilityPoll.requestFullscreen();
+      return;
+    } catch {
+      availabilityPoll.classList.add("is-expanded");
+      updateAvailabilityFullscreenButton();
+      return;
+    }
+  }
+
+  availabilityPoll.classList.toggle("is-expanded");
+  updateAvailabilityFullscreenButton();
+}
+
 function getParticipantKey(name) {
   return name.trim().toLocaleLowerCase("de-DE");
 }
@@ -2226,6 +2262,7 @@ function renderAvailabilityPoll(config) {
   if (!availabilityPoll || !availabilityOptions || !availabilityForm) return;
 
   availabilityPoll.hidden = !config.published;
+  updateAvailabilityFullscreenButton();
   if (!config.published) return;
 
   const dates = getDateRange(config.startDate, config.endDate);
@@ -2399,6 +2436,17 @@ gameVoteForm?.addEventListener("submit", (event) => {
   loadPolls();
 });
 
+availabilityFullscreenButton?.addEventListener("click", () => {
+  toggleAvailabilityFullscreen().catch(() => {});
+});
+
+document.addEventListener("fullscreenchange", updateAvailabilityFullscreenButton);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && availabilityPoll?.classList.contains("is-expanded")) {
+    closeAvailabilityExpandedView();
+  }
+});
+
 function initParticipantUi() {
   ensureParticipantUi();
   if (participantUiInitialized) return;
@@ -2508,6 +2556,33 @@ function createAvailabilityAdminSummary(config) {
   }
 
   section.append(details);
+
+  const notes = entries.filter((entry) => entry.note?.trim());
+  const noteDetails = document.createElement("details");
+  noteDetails.className = "availability-vote-details availability-note-details";
+  const noteSummary = document.createElement("summary");
+  noteSummary.textContent = `Gespeicherte Infos anzeigen (${notes.length})`;
+  noteDetails.append(noteSummary);
+
+  if (!notes.length) {
+    const empty = document.createElement("p");
+    empty.className = "poll-result-empty";
+    empty.textContent = "Keine Infos gespeichert.";
+    noteDetails.append(empty);
+  } else {
+    notes.forEach((entry) => {
+      const note = document.createElement("p");
+      note.className = "poll-result-note availability-saved-note";
+      const name = document.createElement("strong");
+      name.textContent = entry.name;
+      const text = document.createElement("span");
+      text.textContent = entry.note.trim();
+      note.append(name, text);
+      noteDetails.append(note);
+    });
+  }
+
+  section.append(noteDetails);
   return section;
 }
 
@@ -3700,7 +3775,7 @@ function createPollAdmin(polls) {
       });
       return createAdminEntry(
         entry.name,
-        `${Object.keys(entry.answers ?? {}).length} Tage${entry.note?.trim() ? " / mit Info" : ""}`,
+        `${Object.keys(entry.answers ?? {}).length} Tage${entry.note?.trim() ? ` / Info: ${entry.note.trim()}` : ""}`,
         remove
       );
     }),
