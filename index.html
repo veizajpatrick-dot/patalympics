@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Patalympics</title>
-    <link rel="stylesheet" href="styles.css?v=20260624-8" />
+    <link rel="stylesheet" href="styles.css?v=20260705-4" />
   </head>
   <body>
     <header class="site-header" aria-label="Hauptnavigation">
@@ -33,13 +33,23 @@
 
     <main class="home-main">
       <section class="hero" aria-labelledby="hero-title">
-        <video class="hero-bg" autoplay muted loop playsinline poster="assets/patalympics-banner.png?v=20260624-8" aria-hidden="true">
-          <source src="assets/patalympics-home-loop.mp4?v=20260624-8" type="video/mp4" />
+        <video class="hero-bg" autoplay muted loop playsinline poster="assets/patalympics-banner.png?v=20260705-4" aria-hidden="true">
+          <source src="assets/patalympics-home-loop.mp4?v=20260705-4" type="video/mp4" />
         </video>
         <div class="hero-shade"></div>
 
         <div class="hero-content">
-          <h1 id="hero-title">Patalympics</h1>
+          <h1 id="hero-title">
+            <button class="hero-video-trigger" type="button" aria-haspopup="dialog" aria-controls="event-video-dialog">
+              <span>Patalympics</span>
+              <span class="hero-video-hint">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5.5v13l10-6.5-10-6.5Z" />
+                </svg>
+                Video ansehen
+              </span>
+            </button>
+          </h1>
         </div>
 
         <a class="scroll-cue" href="#hosted-by" aria-label="Weiter scrollen">
@@ -51,19 +61,58 @@
 
       <section id="hosted-by" class="hosted-by-section reveal-section" aria-label="Hosted by">
         <div class="hosted-by-frame">
-          <img class="hosted-by-image" src="assets/hosted-by-design.png?v=20260624-8" alt="Hosted by" />
+          <img class="hosted-by-image" src="assets/hosted-by-design.png?v=20260705-4" alt="Hosted by" />
         </div>
       </section>
 
       <section class="trophy-showcase-section reveal-section" aria-label="Hosted by Trophy">
         <div class="trophy-showcase-frame">
-          <img class="trophy-showcase-image" src="assets/hosted-by-trophy.png?v=20260624-8" alt="Patalympics Sommer 2026 Trophy" />
+          <img class="trophy-showcase-image" src="assets/hosted-by-trophy.png?v=20260705-4" alt="Patalympics Sommer 2026 Trophy" />
         </div>
       </section>
     </main>
+    <dialog id="event-video-dialog" class="event-video-dialog" aria-label="Patalympics Video">
+      <div class="event-video-shell">
+        <button class="event-video-close" type="button" aria-label="Video schließen">Schließen</button>
+        <video id="event-video" class="event-video" controls playsinline preload="metadata">
+          <source src="assets/patalympics-trailer-web.mp4?v=20260705-4" type="video/mp4" />
+        </video>
+      </div>
+    </dialog>
     <script>
       document.querySelector(".hero-bg")?.addEventListener("loadedmetadata", (event) => {
         event.currentTarget.playbackRate = 0.65;
+      });
+
+      const eventVideoDialog = document.querySelector("#event-video-dialog");
+      const eventVideo = document.querySelector("#event-video");
+      const eventVideoTrigger = document.querySelector(".hero-video-trigger");
+      const eventVideoClose = document.querySelector(".event-video-close");
+
+      eventVideoTrigger?.addEventListener("click", () => {
+        if (!eventVideoDialog || !eventVideo) return;
+        if (typeof eventVideoDialog.showModal === "function") {
+          eventVideoDialog.showModal();
+        } else {
+          eventVideoDialog.setAttribute("open", "");
+        }
+        eventVideo.currentTime = 0;
+        eventVideo.play().catch(() => {});
+      });
+
+      eventVideoClose?.addEventListener("click", () => {
+        eventVideoDialog?.close();
+      });
+
+      eventVideoDialog?.addEventListener("click", (event) => {
+        if (event.target === eventVideoDialog) {
+          eventVideoDialog.close();
+        }
+      });
+
+      eventVideoDialog?.addEventListener("close", () => {
+        eventVideo?.pause();
+        if (eventVideo) eventVideo.currentTime = 0;
       });
 
       const revealSections = document.querySelectorAll(".reveal-section");
@@ -82,7 +131,7 @@
         }
       }
     </script>
-    <script src="supabase-config.js?v=20260624-8"></script>
-    <script src="site.js?v=20260624-8"></script>
+    <script src="supabase-config.js?v=20260705-4"></script>
+    <script src="site.js?v=20260705-4"></script>
   </body>
 </html>

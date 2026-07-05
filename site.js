@@ -525,17 +525,30 @@ function deleteRemoteGameVoteEntry(name) {
 }
 
 async function loadRemoteParticipants() {
-  const result = await supabaseFetch("participants?select=id,participant_name,created_at&order=created_at.asc");
+  let result = await supabaseFetch("participants?select=id,participant_name,created_at,last_seen_at&order=created_at.asc");
+  if (!Array.isArray(result)) {
+    result = await supabaseFetch("participants?select=id,participant_name,created_at&order=created_at.asc");
+  }
   if (!Array.isArray(result)) return [];
   return result.map((entry) => ({
     id: entry.id,
     name: entry.participant_name,
     createdAt: entry.created_at ?? "",
+    lastSeenAt: entry.last_seen_at ?? "",
   }));
 }
 
 function saveRemoteParticipantEntry(name) {
   return supabaseFetch("rpc/register_participant", {
+    method: "POST",
+    body: JSON.stringify({
+      participant_name_input: name,
+    }),
+  });
+}
+
+function touchRemoteParticipantEntry(name) {
+  return supabaseFetch("rpc/touch_participant", {
     method: "POST",
     body: JSON.stringify({
       participant_name_input: name,
@@ -571,6 +584,18 @@ function formatDate(value) {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(new Date(value));
 }
 
@@ -1940,6 +1965,7 @@ async function validateSavedParticipantName() {
     return "";
   }
 
+  queueRemoteWrite(touchRemoteParticipantEntry(savedName));
   closeParticipantDialog();
   return savedName;
 }
@@ -2082,7 +2108,7 @@ function deleteGameVoteEntry(name) {
 function getKnownParticipants(participants = []) {
   const participantMap = new Map();
 
-  function addParticipant(name, createdAt = "", source = "") {
+  function addParticipant(name, createdAt = "", source = "", lastSeenAt = "") {
     const trimmed = name?.trim();
     if (!trimmed) return;
     const key = getParticipantKey(trimmed);
@@ -2090,16 +2116,18 @@ function getKnownParticipants(participants = []) {
     if (current) {
       if (source && !current.sources.includes(source)) current.sources.push(source);
       if (!current.createdAt && createdAt) current.createdAt = createdAt;
+      if (!current.lastSeenAt && lastSeenAt) current.lastSeenAt = lastSeenAt;
       return;
     }
     participantMap.set(key, {
       name: trimmed,
       createdAt,
+      lastSeenAt,
       sources: source ? [source] : [],
     });
   }
 
-  participants.forEach((entry) => addParticipant(entry.name, entry.createdAt, "User"));
+  participants.forEach((entry) => addParticipant(entry.name, entry.createdAt, "User", entry.lastSeenAt));
   getAvailabilityEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Verfügbarkeit"));
   getSuggestionEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Vorschläge"));
   getGameVoteEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Votes"));
@@ -3507,7 +3535,11 @@ function createUserAdmin(participants = []) {
       name.className = "participant-admin-name";
       const meta = document.createElement("p");
       const sources = entry.sources.length ? entry.sources.join(", ") : "User";
-      meta.textContent = [sources, entry.createdAt ? `Registriert: ${formatDate(entry.createdAt)}` : ""]
+      meta.textContent = [
+        sources,
+        entry.createdAt ? `Registriert: ${formatDate(entry.createdAt)}` : "",
+        entry.lastSeenAt ? `Zuletzt online: ${formatDateTime(entry.lastSeenAt)}` : "Zuletzt online: noch nicht erfasst",
+      ]
         .filter(Boolean)
         .join(" / ");
       const actions = document.createElement("div");
