@@ -2305,25 +2305,103 @@ function renderSuggestionPoll(config) {
 }
 
 function getGameVoteGroups(config) {
-  if (Array.isArray(config.groups)) return config.groups;
+  if (Array.isArray(config.groups)) {
+    return config.groups.map((group) => ({
+      title: group.title || "Allgemein",
+      options: (group.options ?? [])
+        .map(normalizeGameVoteOption)
+        .filter((option) => option.name),
+    }));
+  }
   if (Array.isArray(config.options) && config.options.length) {
-    return [{ title: "Allgemein", options: config.options }];
+    return [{
+      title: "Allgemein",
+      options: config.options
+        .map(normalizeGameVoteOption)
+        .filter((option) => option.name),
+    }];
   }
   return [];
 }
 
+function normalizeGameVoteUrl(value = "") {
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(withProtocol);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function parseGameVoteOptionLine(line = "") {
+  const raw = String(line).trim();
+  if (!raw) return { name: "", url: "" };
+  const separatorIndex = raw.indexOf("|");
+  if (separatorIndex === -1) return { name: raw, url: "" };
+
+  const name = raw.slice(0, separatorIndex).trim();
+  const url = normalizeGameVoteUrl(raw.slice(separatorIndex + 1));
+  return { name: name || url, url };
+}
+
+function normalizeGameVoteOption(option) {
+  if (option && typeof option === "object") {
+    return {
+      name: String(option.name ?? option.title ?? option.label ?? option.text ?? "").trim(),
+      url: normalizeGameVoteUrl(option.url ?? option.href ?? option.link ?? ""),
+    };
+  }
+
+  return parseGameVoteOptionLine(option);
+}
+
+function formatGameVoteOptionForAdmin(option) {
+  const normalized = normalizeGameVoteOption(option);
+  return normalized.url ? `${normalized.name} | ${normalized.url}` : normalized.name;
+}
+
+function getGameVoteOptionValue(category, option) {
+  const normalized = normalizeGameVoteOption(option);
+  return `${category}::${normalized.name}`;
+}
+
+function isGameVoteOptionSelected(category, option, selectedOptions) {
+  const normalized = normalizeGameVoteOption(option);
+  return selectedOptions.includes(getGameVoteOptionValue(category, normalized))
+    || selectedOptions.includes(normalized.name);
+}
+
 function createGameOption(option, category, selectedOptions) {
+  const normalized = normalizeGameVoteOption(option);
+  const wrap = document.createElement("div");
+  wrap.className = "vote-option-row";
   const answer = document.createElement("label");
   answer.className = "vote-option";
   const input = document.createElement("input");
   input.type = "checkbox";
   input.name = "games";
-  input.value = `${category}::${option}`;
-  input.checked = selectedOptions.includes(input.value) || selectedOptions.includes(option);
+  input.value = getGameVoteOptionValue(category, normalized);
+  input.checked = isGameVoteOptionSelected(category, normalized, selectedOptions);
   const caption = document.createElement("span");
-  caption.textContent = option;
+  caption.textContent = normalized.name;
   answer.append(input, caption);
-  return answer;
+  wrap.append(answer);
+
+  if (normalized.url) {
+    const link = document.createElement("a");
+    link.className = "vote-option-link";
+    link.href = normalized.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Öffnen";
+    wrap.append(link);
+  }
+
+  return wrap;
 }
 
 function createGameVoteGroup(group, selectedOptions) {
@@ -2637,11 +2715,12 @@ function createGameVoteResults(config) {
     groupTitle.textContent = group.title || "Allgemein";
     groupBox.append(groupTitle);
     group.options.forEach((option) => {
-      const value = `${groupTitle.textContent}::${option}`;
+      const normalized = normalizeGameVoteOption(option);
+      const value = getGameVoteOptionValue(groupTitle.textContent, normalized);
       const voters = entries
-        .filter((entry) => entry.answers?.includes(value) || entry.answers?.includes(option))
+        .filter((entry) => entry.answers?.includes(value) || entry.answers?.includes(normalized.name))
         .map((entry) => entry.name);
-      const line = createResultLine(option, `${voters.length} Stimmen`, voters.length ? "result-yes" : "result-open");
+      const line = createResultLine(normalized.name, `${voters.length} Stimmen`, voters.length ? "result-yes" : "result-open");
       groupBox.append(line);
       if (voters.length) {
         const voterList = document.createElement("p");
@@ -3736,7 +3815,7 @@ function createPollAdmin(polls) {
     block.className = "vote-category-block";
     const name = createAdminInput("text", group.title ?? "");
     name.className = "vote-category-name";
-    const games = createAdminTextarea((group.options ?? []).join("\n"), 4);
+    const games = createAdminTextarea((group.options ?? []).map(formatGameVoteOptionForAdmin).join("\n"), 4);
     games.className = "vote-category-games";
     const remove = document.createElement("button");
     remove.className = "admin-secondary-button remove-category";
@@ -3745,7 +3824,7 @@ function createPollAdmin(polls) {
     remove.addEventListener("click", () => block.remove());
     block.append(
       createAdminField("Kategorie", name),
-      createAdminField("Spiele (eins pro Zeile)", games),
+      createAdminField("Spiele (eins pro Zeile, optional: Spiel | Link)", games),
       remove
     );
     categoryEditor.append(block);
@@ -3855,8 +3934,9 @@ function createPollAdmin(polls) {
             title: block.querySelector(".vote-category-name").value.trim() || "Allgemein",
             options: block.querySelector(".vote-category-games").value
               .split("\n")
-              .map((item) => item.trim())
-              .filter(Boolean),
+              .map(parseGameVoteOptionLine)
+              .filter((option) => option.name)
+              .map((option) => (option.url ? option : option.name)),
           }))
           .filter((group) => group.options.length),
       },

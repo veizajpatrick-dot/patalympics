@@ -1845,8 +1845,17 @@ h1 {
   background: #db534d;
 }
 
+.vote-option-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
+  min-width: 0;
+}
+
 .vote-option {
   position: relative;
+  display: block;
+  min-width: 0;
   cursor: pointer;
 }
 
@@ -1892,6 +1901,25 @@ h1 {
 .vote-option input:checked + span {
   border-color: rgba(245, 191, 105, 0.6);
   background: rgba(138, 53, 255, 0.25);
+}
+
+.vote-option-link {
+  display: grid;
+  min-width: 68px;
+  min-height: 40px;
+  place-items: center;
+  border: 1px solid rgba(245, 191, 105, 0.24);
+  color: var(--sand);
+  background: rgba(18, 11, 29, 0.62);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.vote-option-link:hover,
+.vote-option-link:focus-visible {
+  border-color: rgba(245, 191, 105, 0.72);
+  background: rgba(245, 191, 105, 0.12);
 }
 
 .poll-inside-empty {
