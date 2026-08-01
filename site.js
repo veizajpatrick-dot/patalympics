@@ -2392,12 +2392,13 @@ function createGameOption(option, category, selectedOptions) {
   wrap.append(answer);
 
   if (normalized.url) {
+    wrap.classList.add("has-link");
     const link = document.createElement("a");
     link.className = "vote-option-link";
     link.href = normalized.url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = "Öffnen";
+    link.textContent = "Link";
     wrap.append(link);
   }
 

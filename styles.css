@@ -1846,9 +1846,8 @@ h1 {
 }
 
 .vote-option-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 5px;
+  position: relative;
+  display: block;
   min-width: 0;
 }
 
@@ -1871,31 +1870,41 @@ h1 {
 
 .vote-group {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .vote-group h2 {
   margin: 0;
   color: var(--sand);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 900;
   text-transform: uppercase;
 }
 
 .vote-group-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
 }
 
 .vote-option span {
-  display: block;
-  min-height: 40px;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
   padding: 10px 12px;
   border: 1px solid rgba(255, 250, 241, 0.1);
   color: rgba(255, 250, 241, 0.82);
-  background: rgba(255, 250, 241, 0.035);
+  background:
+    linear-gradient(90deg, rgba(255, 250, 241, 0.055), rgba(255, 250, 241, 0.026)),
+    rgba(18, 11, 29, 0.22);
+  font-size: 0.88rem;
   font-weight: 800;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.vote-option-row.has-link .vote-option span {
+  padding-right: 64px;
 }
 
 .vote-option input:checked + span {
@@ -1904,16 +1913,20 @@ h1 {
 }
 
 .vote-option-link {
+  position: absolute;
+  top: 50%;
+  right: 8px;
   display: grid;
-  min-width: 68px;
-  min-height: 40px;
+  min-width: 46px;
+  min-height: 26px;
   place-items: center;
   border: 1px solid rgba(245, 191, 105, 0.24);
   color: var(--sand);
   background: rgba(18, 11, 29, 0.62);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 900;
   text-transform: uppercase;
+  transform: translateY(-50%);
 }
 
 .vote-option-link:hover,
