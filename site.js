@@ -1965,7 +1965,7 @@ async function toggleAvailabilityFullscreen() {
 }
 
 function getParticipantKey(name) {
-  return name.trim().toLocaleLowerCase("de-DE");
+  return String(name ?? "").trim().toLocaleLowerCase("de-DE");
 }
 
 function getSavedParticipantName() {
