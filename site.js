@@ -28,6 +28,7 @@ const gameVoteInfo = document.querySelector("#game-vote-info");
 const gameVoteForm = document.querySelector("#game-vote-form");
 const gameVoteOptions = document.querySelector("#game-vote-options");
 const gameVoteStatus = document.querySelector("#game-vote-status");
+const mvpPollList = document.querySelector("#mvp-poll-list");
 const userContent = document.querySelector("#user-content");
 let participantDialog = document.querySelector("#participant-dialog");
 let participantForm = document.querySelector("#participant-form");
@@ -61,6 +62,7 @@ const initialSiteData = {
     availability: { published: false, info: "", startDate: "", endDate: "" },
     suggestions: { published: false, info: "" },
     gameVote: { published: false, info: "", groups: [] },
+    mvp: [],
   },
   ranking: {
     mode: "solo",
@@ -435,10 +437,11 @@ function syncRemoteData(key, value) {
 async function loadRemotePollData() {
   if (!supabaseEnabled || remotePollDataLoaded) return;
 
-  const [availability, suggestions, votes] = await Promise.all([
+  const [availability, suggestions, votes, mvpVotes] = await Promise.all([
     supabaseFetch("poll_availability_answers?select=id,participant_name,answers,note,updated_at"),
     supabaseFetch("poll_game_suggestions?select=id,participant_name,suggestion,created_at&order=created_at.asc"),
     supabaseFetch("poll_game_votes?select=id,participant_name,answers,updated_at"),
+    supabaseFetch("poll_mvp_votes?select=id,poll_id,participant_name,candidate_name,updated_at"),
   ]);
 
   if (Array.isArray(availability)) {
@@ -471,6 +474,16 @@ async function loadRemotePollData() {
         updatedAt: entry.updated_at ?? "",
       })),
     };
+  }
+
+  if (Array.isArray(mvpVotes)) {
+    remoteStore.pollMvpVotes = mvpVotes.map((entry) => ({
+      id: entry.id,
+      pollId: entry.poll_id,
+      name: entry.participant_name,
+      candidate: entry.candidate_name,
+      updatedAt: entry.updated_at ?? "",
+    }));
   }
 
   remotePollDataLoaded = true;
@@ -513,6 +526,19 @@ function saveRemoteGameVoteEntry(entry) {
   });
 }
 
+function saveRemoteMvpVoteEntry(entry) {
+  return supabaseFetch("poll_mvp_votes?on_conflict=poll_id,participant_name", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      poll_id: entry.pollId,
+      participant_name: entry.name,
+      candidate_name: entry.candidate,
+      updated_at: entry.updatedAt ?? new Date().toISOString(),
+    }),
+  });
+}
+
 function deleteRemoteAvailabilityEntry(name) {
   return deleteRemoteRows(`poll_availability_answers?participant_name=eq.${encodeURIComponent(name)}`);
 }
@@ -523,6 +549,14 @@ function deleteRemoteSuggestionEntry(id) {
 
 function deleteRemoteGameVoteEntry(name) {
   return deleteRemoteRows(`poll_game_votes?participant_name=eq.${encodeURIComponent(name)}`);
+}
+
+function deleteRemoteMvpVoteEntry(pollId, name) {
+  return deleteRemoteRows(`poll_mvp_votes?poll_id=eq.${encodeURIComponent(pollId)}&participant_name=eq.${encodeURIComponent(name)}`);
+}
+
+function deleteRemoteMvpPollVotes(pollId) {
+  return deleteRemoteRows(`poll_mvp_votes?poll_id=eq.${encodeURIComponent(pollId)}`);
 }
 
 async function loadRemoteParticipants() {
@@ -1034,7 +1068,7 @@ function getTotalPoints(player, scores, columns) {
     .filter((column) => column.type === "day")
     .reduce((total, column) => total + getDayTotal(scores, column), 0);
 
-  return dayPoints + getMvpPoints(player) * 2;
+  return dayPoints + getMvpPoints(player);
 }
 
 function getGameColumns(columns) {
@@ -1058,7 +1092,7 @@ function getLatestEnteredGameIndex(players, gameColumns) {
 
 function getPointsUntilGame(player, gameColumns, gameIndex) {
   const scores = player.scores ?? {};
-  const mvpPoints = getMvpPoints(player) * 2;
+  const mvpPoints = getMvpPoints(player);
   if (gameIndex < 0) return mvpPoints;
 
   const gamePoints = gameColumns
@@ -2164,6 +2198,48 @@ function deleteGameVoteEntry(name) {
   queueRemoteWrite(deleteRemoteGameVoteEntry(name));
 }
 
+function getMvpVoteEntries() {
+  const savedVotes = getStoredJson("pollMvpVotes", []);
+  return Array.isArray(savedVotes)
+    ? savedVotes.map((entry) => ({
+      id: entry.id,
+      pollId: entry.pollId ?? entry.poll_id ?? "",
+      name: entry.name ?? entry.participant_name ?? "",
+      candidate: entry.candidate ?? entry.candidate_name ?? "",
+      updatedAt: entry.updatedAt ?? entry.updated_at ?? "",
+    })).filter((entry) => entry.pollId && entry.name && entry.candidate)
+    : [];
+}
+
+function getMvpVoteEntry(pollId, name) {
+  const key = getParticipantKey(name);
+  return getMvpVoteEntries()
+    .find((entry) => entry.pollId === pollId && getParticipantKey(entry.name) === key) ?? null;
+}
+
+function saveMvpVoteEntry(entry) {
+  const key = getParticipantKey(entry.name);
+  const nextEntries = getMvpVoteEntries()
+    .filter((savedEntry) => !(savedEntry.pollId === entry.pollId && getParticipantKey(savedEntry.name) === key));
+  nextEntries.push(entry);
+  setStoredJson("pollMvpVotes", nextEntries);
+  queueRemoteWrite(saveRemoteMvpVoteEntry(entry));
+}
+
+function deleteMvpVoteEntry(pollId, name) {
+  const key = getParticipantKey(name);
+  const nextEntries = getMvpVoteEntries()
+    .filter((entry) => !(entry.pollId === pollId && getParticipantKey(entry.name) === key));
+  setStoredJson("pollMvpVotes", nextEntries);
+  queueRemoteWrite(deleteRemoteMvpVoteEntry(pollId, name));
+}
+
+function deleteMvpPollVotes(pollId) {
+  const nextEntries = getMvpVoteEntries().filter((entry) => entry.pollId !== pollId);
+  setStoredJson("pollMvpVotes", nextEntries);
+  queueRemoteWrite(deleteRemoteMvpPollVotes(pollId));
+}
+
 function getKnownParticipants(participants = []) {
   const participantMap = new Map();
 
@@ -2190,8 +2266,50 @@ function getKnownParticipants(participants = []) {
   getAvailabilityEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Verfügbarkeit"));
   getSuggestionEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Vorschläge"));
   getGameVoteEntries().forEach((entry) => addParticipant(entry.name, entry.createdAt, "Votes"));
+  getMvpVoteEntries().forEach((entry) => {
+    addParticipant(entry.name, entry.updatedAt, "MVP");
+    addParticipant(entry.candidate, entry.updatedAt, "MVP");
+  });
 
   return [...participantMap.values()].sort((a, b) => a.name.localeCompare(b.name, "de-DE"));
+}
+
+function updateMvpAssignments(transformParticipants) {
+  const polls = getStoredJson("adminPollData", initialSiteData.polls);
+  const currentMvpPolls = getMvpPolls(polls);
+  const nextMvpPolls = currentMvpPolls.map((poll) => ({
+    ...poll,
+    participants: transformParticipants(poll.participants)
+      .map((name) => String(name ?? "").trim())
+      .filter(Boolean),
+  }));
+
+  setStoredJson("adminPollData", {
+    ...polls,
+    mvp: nextMvpPolls,
+  });
+}
+
+function renameMvpAssignment(oldName, newName) {
+  const oldKey = getParticipantKey(oldName);
+  if (!oldKey) return;
+  updateMvpAssignments((participants) => {
+    const seen = new Set();
+    return participants.map((name) => (getParticipantKey(name) === oldKey ? newName : name))
+      .filter((name) => {
+        const key = getParticipantKey(name);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  });
+}
+
+function removeMvpAssignments(names) {
+  const deleteKeys = new Set(names.map(getParticipantKey).filter(Boolean));
+  if (!deleteKeys.size) return;
+  updateMvpAssignments((participants) => participants
+    .filter((name) => !deleteKeys.has(getParticipantKey(name))));
 }
 
 function createMatrixLabel(text, className) {
@@ -2450,6 +2568,153 @@ function renderGameVotePoll(config) {
   gameVoteOptions.append(...groups.map((group) => createGameVoteGroup(group, savedAnswers)));
 }
 
+function createMvpPollId() {
+  return `mvp-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+}
+
+function getMvpPolls(polls = {}) {
+  const rawPolls = Array.isArray(polls.mvp) ? polls.mvp : [];
+  return rawPolls.map((poll, index) => {
+    const participants = Array.isArray(poll.participants) ? poll.participants : [];
+    const participantMap = new Map();
+    participants.forEach((name) => {
+      const trimmed = String(name ?? "").trim();
+      if (!trimmed) return;
+      participantMap.set(getParticipantKey(trimmed), trimmed);
+    });
+
+    return {
+      id: String(poll.id || `mvp-${index + 1}`),
+      title: String(poll.title || `MVP Vote ${index + 1}`).trim(),
+      info: String(poll.info ?? ""),
+      published: Boolean(poll.published),
+      participants: [...participantMap.values()].sort((a, b) => a.localeCompare(b, "de-DE")),
+    };
+  }).filter((poll) => poll.title || poll.info || poll.participants.length);
+}
+
+function isAssignedToMvpPoll(poll, name) {
+  const key = getParticipantKey(name);
+  return Boolean(key) && poll.participants.some((participant) => getParticipantKey(participant) === key);
+}
+
+function createMvpCandidateOption(poll, candidate, savedCandidate) {
+  const label = document.createElement("label");
+  label.className = "mvp-candidate";
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.name = `mvp-${poll.id}`;
+  input.value = candidate;
+  input.checked = getParticipantKey(savedCandidate) === getParticipantKey(candidate);
+  const text = document.createElement("span");
+  text.textContent = candidate;
+  label.append(input, text);
+  return label;
+}
+
+function createMvpPollCard(poll) {
+  const section = document.createElement("section");
+  section.className = "content-panel simple-poll mvp-poll";
+  const head = document.createElement("div");
+  head.className = "section-head";
+  const title = document.createElement("h1");
+  title.textContent = poll.title;
+  head.append(title);
+  section.append(head);
+  renderPollResultButtonInSection(section, poll.title, () => createMvpResults(poll));
+
+  if (!poll.published && isAdminLoggedIn()) {
+    const unpublished = document.createElement("p");
+    unpublished.className = "poll-copy mvp-admin-hint";
+    unpublished.textContent = "Noch nicht freigegeben.";
+    section.append(unpublished);
+  }
+
+  const info = document.createElement("p");
+  info.className = "poll-copy";
+  info.hidden = !poll.info.trim();
+  info.textContent = poll.info;
+  section.append(info);
+
+  const name = getParticipantName();
+  const assigned = isAssignedToMvpPoll(poll, name);
+  const savedEntry = assigned ? getMvpVoteEntry(poll.id, name) : null;
+  const form = document.createElement("form");
+  form.className = "poll-answer-form mvp-vote-form";
+  const options = document.createElement("div");
+  options.className = "mvp-candidate-grid";
+  const status = document.createElement("p");
+  status.className = "form-status";
+  status.setAttribute("role", "status");
+  const button = document.createElement("button");
+  button.className = "form-button";
+  button.type = "submit";
+  button.textContent = "MVP wählen";
+
+  if (!poll.participants.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state poll-inside-empty";
+    empty.textContent = "Noch keine User zugewiesen.";
+    form.append(empty);
+    button.disabled = true;
+  } else if (!assigned) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state poll-inside-empty";
+    empty.textContent = "Dieser MVP Vote ist nur für zugewiesene User sichtbar.";
+    form.append(empty);
+    button.disabled = true;
+  } else if (savedEntry && !isAdminLoggedIn()) {
+    const saved = document.createElement("p");
+    saved.className = "mvp-vote-saved";
+    saved.textContent = "Deine Stimme wurde gespeichert.";
+    form.append(saved);
+    button.disabled = true;
+  } else {
+    options.append(...poll.participants.map((candidate) => createMvpCandidateOption(poll, candidate, savedEntry?.candidate)));
+    form.append(options);
+  }
+
+  if (!button.disabled) form.append(button);
+  form.append(status);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const participantName = ensureParticipantName();
+    if (!participantName || !isAssignedToMvpPoll(poll, participantName)) return;
+    const selected = form.querySelector('input[type="radio"]:checked');
+    if (!selected) {
+      status.textContent = "Bitte einen MVP auswählen.";
+      return;
+    }
+
+    saveMvpVoteEntry({
+      pollId: poll.id,
+      name: participantName,
+      candidate: selected.value,
+      updatedAt: new Date().toISOString(),
+    });
+    status.textContent = "MVP Vote gespeichert.";
+    loadPolls();
+  });
+
+  section.append(form);
+  return section;
+}
+
+function renderMvpPolls(polls) {
+  if (!mvpPollList) return 0;
+
+  mvpPollList.replaceChildren();
+  const participantName = getParticipantName();
+  const isAdmin = isAdminLoggedIn();
+  const visiblePolls = getMvpPolls(polls).filter((poll) => (
+    (isAdmin && (poll.published || poll.title || poll.participants.length))
+      || (poll.published && isAssignedToMvpPoll(poll, participantName))
+  ));
+
+  mvpPollList.append(...visiblePolls.map(createMvpPollCard));
+  return visiblePolls.length;
+}
+
 async function loadPolls() {
   if (!pollEmpty) return;
 
@@ -2459,10 +2724,12 @@ async function loadPolls() {
   renderAvailabilityPoll(polls.availability);
   renderSuggestionPoll(polls.suggestions);
   renderGameVotePoll(polls.gameVote);
+  const visibleMvpPolls = renderMvpPolls(polls);
   pollEmpty.hidden = Boolean(
     (polls.availability.published && !availabilityPoll?.hidden)
       || (polls.suggestions.published && !suggestionPoll?.hidden)
       || (polls.gameVote.published && !gameVotePoll?.hidden)
+      || visibleMvpPolls
   );
 }
 
@@ -2732,6 +2999,42 @@ function createGameVoteResults(config) {
     });
     section.append(groupBox);
   });
+
+  return section;
+}
+
+function createMvpResults(poll) {
+  const section = createPollResultSection("Auswertung");
+  const entries = getMvpVoteEntries().filter((entry) => entry.pollId === poll.id);
+
+  if (!poll.participants.length) {
+    const empty = document.createElement("p");
+    empty.className = "poll-result-empty";
+    empty.textContent = "Noch keine User zugewiesen.";
+    section.append(empty);
+    return section;
+  }
+
+  poll.participants.forEach((candidate) => {
+    const voters = entries
+      .filter((entry) => getParticipantKey(entry.candidate) === getParticipantKey(candidate))
+      .map((entry) => entry.name);
+    section.append(createResultLine(candidate, `${voters.length} Stimmen`, voters.length ? "result-yes" : "result-open"));
+    if (voters.length) {
+      const voterList = document.createElement("p");
+      voterList.className = "poll-result-voters";
+      voterList.textContent = voters.join(", ");
+      section.append(voterList);
+    }
+  });
+
+  const missingVoters = poll.participants.filter((name) => !getMvpVoteEntry(poll.id, name));
+  if (missingVoters.length) {
+    const missing = document.createElement("p");
+    missing.className = "poll-result-voters";
+    missing.textContent = `Noch offen: ${missingVoters.join(", ")}`;
+    section.append(missing);
+  }
 
   return section;
 }
@@ -3027,7 +3330,7 @@ async function renderAdminPanel(modalBody) {
   wrap.append(
     renderAdminSection("Rules", createNewsAdmin(data.news)),
     renderAdminSection("Schedule", createCalendarAdmin(data.calendar, data.scheduleNote)),
-    renderAdminSection("Polls", createPollAdmin(data.polls)),
+    renderAdminSection("Polls", createPollAdmin(data.polls, data.participants)),
     renderAdminSection("User", createUserAdmin(data.participants)),
     renderAdminSection("Rangliste", createRankingAdmin(data.ranking)),
     renderAdminSection("Hall of Fame", createHallOfFameAdmin(data.hallOfFame, data.rankingArchive)),
@@ -3058,7 +3361,7 @@ function getInlineAdminConfig(data) {
   if (path.endsWith("/poll.html")) {
     return {
       title: "Polls bearbeiten",
-      content: createPollAdmin(data.polls),
+      content: createPollAdmin(data.polls, data.participants),
     };
   }
 
@@ -3699,6 +4002,7 @@ function createUserAdmin(participants = []) {
     if (knownParticipants.some((entry) => getParticipantKey(entry.name) === savedNameKey)) {
       setSavedParticipantName("");
     }
+    removeMvpAssignments(knownParticipants.map((entry) => entry.name));
     queueRemoteWrite(Promise.all(knownParticipants.map((entry) => deleteRemoteParticipantEntry(entry.name))));
     refreshAfterAdminSave(status, "Alle User gelöscht.");
   });
@@ -3728,6 +4032,7 @@ function createUserAdmin(participants = []) {
       save.addEventListener("click", () => {
         const nextName = name.value.trim();
         if (!nextName || getParticipantKey(nextName) === getParticipantKey(entry.name)) return;
+        renameMvpAssignment(entry.name, nextName);
         queueRemoteWrite(updateRemoteParticipantName(entry.name, nextName));
         refreshAfterAdminSave(status, "User gespeichert.");
       });
@@ -3737,6 +4042,7 @@ function createUserAdmin(participants = []) {
         if (getParticipantKey(getSavedParticipantName()) === getParticipantKey(entry.name)) {
           setSavedParticipantName("");
         }
+        removeMvpAssignments([entry.name]);
         queueRemoteWrite(deleteRemoteParticipantEntry(entry.name));
         refreshAfterAdminSave(status, "User gelöscht.");
       });
@@ -3763,11 +4069,16 @@ function createUserAdmin(participants = []) {
   return form;
 }
 
-function createPollAdmin(polls) {
+function createPollAdmin(polls, participants = []) {
   const form = document.createElement("form");
   form.className = "admin-form poll-admin-form";
   const status = document.createElement("p");
   status.className = "form-status";
+  const registeredParticipants = [...new Map((participants ?? [])
+    .map((entry) => String(entry.name ?? entry.participant_name ?? "").trim())
+    .filter(Boolean)
+    .map((name) => [getParticipantKey(name), name])).values()]
+    .sort((a, b) => a.localeCompare(b, "de-DE"));
 
   const availability = document.createElement("section");
   availability.className = "poll-admin-section";
@@ -3840,9 +4151,86 @@ function createPollAdmin(polls) {
     addCategoryButton
   );
 
+  const mvp = document.createElement("section");
+  mvp.className = "poll-admin-section";
+  const mvpTitle = document.createElement("h3");
+  mvpTitle.textContent = "MVP Polls";
+  const mvpEditor = document.createElement("div");
+  mvpEditor.className = "mvp-poll-editor";
+  const addMvpPollButton = document.createElement("button");
+  addMvpPollButton.className = "admin-secondary-button";
+  addMvpPollButton.type = "button";
+  addMvpPollButton.textContent = "MVP Poll hinzufügen";
+
+  function appendMvpPoll(poll = {}) {
+    const block = document.createElement("div");
+    block.className = "mvp-poll-admin-block";
+    block.dataset.pollId = poll.id || createMvpPollId();
+
+    const published = createAdminInput("checkbox");
+    published.className = "mvp-poll-published";
+    published.checked = Boolean(poll.published);
+    const titleField = createAdminInput("text", poll.title ?? "");
+    titleField.className = "mvp-poll-title";
+    const infoField = createAdminTextarea(poll.info ?? "", 3);
+    infoField.className = "mvp-poll-info";
+    const assignedKeys = new Set((poll.participants ?? []).map(getParticipantKey));
+    const userList = document.createElement("div");
+    userList.className = "mvp-user-list";
+
+    if (!registeredParticipants.length) {
+      const empty = document.createElement("p");
+      empty.className = "admin-list-empty";
+      empty.textContent = "Noch keine registrierten User vorhanden.";
+      userList.append(empty);
+    } else {
+      registeredParticipants.forEach((name) => {
+        const label = document.createElement("label");
+        label.className = "mvp-user-choice";
+        const input = createAdminInput("checkbox");
+        input.className = "mvp-poll-user";
+        input.value = name;
+        input.checked = assignedKeys.has(getParticipantKey(name));
+        const text = document.createElement("span");
+        text.textContent = name;
+        label.append(input, text);
+        userList.append(label);
+      });
+    }
+
+    const remove = createActionButton("Poll entfernen", "admin-secondary-button remove-category");
+    remove.addEventListener("click", () => block.remove());
+    const clearVotes = createActionButton("Votes löschen");
+    clearVotes.addEventListener("click", () => {
+      deleteMvpPollVotes(block.dataset.pollId);
+      refreshAfterAdminSave(status, "MVP Votes gelöscht.");
+    });
+    const actions = document.createElement("div");
+    actions.className = "mvp-poll-admin-actions";
+    actions.append(clearVotes, remove);
+    const userField = document.createElement("div");
+    userField.className = "field";
+    const userFieldLabel = document.createElement("span");
+    userFieldLabel.textContent = "Zugewiesene User";
+    userField.append(userFieldLabel, userList);
+    block.append(
+      createPollAdminHeader("MVP Poll", published),
+      createAdminField("Name", titleField),
+      createAdminField("Info", infoField),
+      userField,
+      actions
+    );
+    mvpEditor.append(block);
+  }
+
+  getMvpPolls(polls).forEach(appendMvpPoll);
+  addMvpPollButton.addEventListener("click", () => appendMvpPoll());
+  mvp.append(mvpTitle, mvpEditor, addMvpPollButton);
+
   const availabilityEntries = getAvailabilityEntries();
   const suggestionEntries = getSuggestionEntries();
   const gameVoteEntries = getGameVoteEntries();
+  const mvpVoteEntries = getMvpVoteEntries();
 
   const availabilityDataTitle = document.createElement("h4");
   availabilityDataTitle.textContent = "Antworten";
@@ -3912,7 +4300,32 @@ function createPollAdmin(polls) {
   });
   gameVote.append(gameVoteDataTitle, gameVoteDataList, gameVoteClear);
 
-  form.append(availability, suggestions, gameVote, createAdminButton("Polls speichern"), status);
+  const mvpPollLookup = new Map(getMvpPolls(polls).map((poll) => [poll.id, poll.title]));
+  const mvpDataTitle = document.createElement("h4");
+  mvpDataTitle.textContent = "MVP Votes";
+  const mvpDataList = createAdminList(
+    mvpVoteEntries.map((entry) => {
+      const remove = createActionButton("LÃ¶schen", "admin-remove-button");
+      remove.addEventListener("click", () => {
+        deleteMvpVoteEntry(entry.pollId, entry.name);
+        refreshAfterAdminSave(status, "MVP Vote gelÃ¶scht.");
+      });
+      return createAdminEntry(
+        entry.name,
+        `${mvpPollLookup.get(entry.pollId) ?? entry.pollId}: ${entry.candidate}`,
+        remove
+      );
+    }),
+    "Noch keine MVP Votes vorhanden."
+  );
+  const mvpClear = createActionButton("Alle MVP Votes lÃ¶schen");
+  mvpClear.addEventListener("click", () => {
+    mvpVoteEntries.forEach((entry) => deleteMvpVoteEntry(entry.pollId, entry.name));
+    refreshAfterAdminSave(status, "Alle MVP Votes gelÃ¶scht.");
+  });
+  mvp.append(mvpDataTitle, mvpDataList, mvpClear);
+
+  form.append(availability, suggestions, gameVote, mvp, createAdminButton("Polls speichern"), status);
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -3941,6 +4354,17 @@ function createPollAdmin(polls) {
           }))
           .filter((group) => group.options.length),
       },
+      mvp: [...mvpEditor.querySelectorAll(".mvp-poll-admin-block")]
+        .map((block, index) => ({
+          id: block.dataset.pollId || createMvpPollId(),
+          title: block.querySelector(".mvp-poll-title").value.trim() || `MVP Vote ${index + 1}`,
+          info: block.querySelector(".mvp-poll-info").value.trim(),
+          published: block.querySelector(".mvp-poll-published").checked,
+          participants: [...block.querySelectorAll(".mvp-poll-user:checked")]
+            .map((input) => input.value)
+            .filter(Boolean),
+        }))
+        .filter((poll) => poll.title || poll.info || poll.participants.length),
     };
 
     setStoredJson("adminPollData", nextPolls);

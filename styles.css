@@ -1935,6 +1935,64 @@ h1 {
   background: rgba(245, 191, 105, 0.12);
 }
 
+.mvp-poll-list {
+  display: grid;
+  gap: 12px;
+}
+
+.mvp-admin-hint {
+  color: rgba(245, 191, 105, 0.82);
+}
+
+.mvp-candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.mvp-candidate {
+  position: relative;
+  display: block;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.mvp-candidate input {
+  position: absolute;
+  opacity: 0;
+}
+
+.mvp-candidate span {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  padding: 9px 11px;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  color: rgba(255, 250, 241, 0.84);
+  background:
+    linear-gradient(90deg, rgba(255, 250, 241, 0.06), rgba(255, 250, 241, 0.025)),
+    rgba(18, 11, 29, 0.3);
+  font-size: 0.84rem;
+  font-weight: 900;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.mvp-candidate input:checked + span {
+  border-color: rgba(245, 191, 105, 0.64);
+  color: var(--sand);
+  background: rgba(138, 53, 255, 0.28);
+}
+
+.mvp-vote-saved {
+  margin: 0;
+  padding: 12px;
+  color: rgba(255, 250, 241, 0.72);
+  background: rgba(255, 250, 241, 0.04);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
 .poll-inside-empty {
   padding: 14px;
 }
@@ -2458,6 +2516,56 @@ h1 {
   min-height: 30px;
   padding: 0 10px;
   font-size: 0.72rem;
+}
+
+.mvp-poll-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.mvp-poll-admin-block {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  background: rgba(18, 11, 29, 0.34);
+}
+
+.mvp-user-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 6px;
+}
+
+.mvp-user-choice {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  background: rgba(10, 7, 16, 0.3);
+  color: rgba(255, 250, 241, 0.8);
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mvp-user-choice input {
+  width: 15px;
+  min-height: 15px;
+}
+
+.mvp-user-choice span {
+  color: inherit;
+  font-size: inherit;
+  text-transform: none;
+}
+
+.mvp-poll-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .poll-result-box {
