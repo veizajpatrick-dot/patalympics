@@ -3029,6 +3029,19 @@ h1 {
   padding: 12px;
 }
 
+.pickban-admin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.pickban-admin-actions button {
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: 0.7rem;
+}
+
 @media (max-width: 840px) {
   .pickban-lobbies {
     grid-template-columns: repeat(2, minmax(0, 1fr));

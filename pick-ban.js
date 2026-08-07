@@ -7,6 +7,10 @@
   const lobbyCount = 5;
   const teamLabels = { left: "Team 1", right: "Team 2" };
   const teamSides = { left: "Links", right: "Rechts" };
+  const testerSlots = {
+    left: ["Tester 1", "Tester 2"],
+    right: ["Tester 3", "Tester 4"],
+  };
   let playerImageMap = {};
   const defaultGames = [
     { id: "game-1", title: "Battlerite", image: "assets/pickban-battlerite.jpg" },
@@ -89,6 +93,10 @@
 
   function getActiveParticipantName() {
     return typeof getParticipantName === "function" ? getParticipantName() : "";
+  }
+
+  function isPickBanAdmin() {
+    return typeof isAdminLoggedIn === "function" && isAdminLoggedIn();
   }
 
   function getLobbyIdFromHash() {
@@ -216,6 +224,68 @@
 
   function getOtherTeam(team) {
     return team === "left" ? "right" : "left";
+  }
+
+  function getAllPlayers(lobby) {
+    return [...lobby.teams.left.players, ...lobby.teams.right.players];
+  }
+
+  function isTesterName(name) {
+    return /^tester\s+\d+$/i.test(String(name ?? "").trim());
+  }
+
+  function getTesterNameForSlot(lobby, team, slotIndex) {
+    const usedKeys = new Set(getAllPlayers(lobby).map(nameKey));
+    const preferred = testerSlots[team]?.[slotIndex] || "";
+    if (preferred && !usedKeys.has(nameKey(preferred))) return preferred;
+
+    for (let index = 1; index <= 20; index += 1) {
+      const fallback = `Tester ${index}`;
+      if (!usedKeys.has(nameKey(fallback))) return fallback;
+    }
+    return "";
+  }
+
+  function fillEmptyTesterSlots(lobby) {
+    if (lobby.phase !== "waiting") return false;
+    let changed = false;
+
+    ["left", "right"].forEach((team) => {
+      while (lobby.teams[team].players.length < 2) {
+        const tester = getTesterNameForSlot(lobby, team, lobby.teams[team].players.length);
+        if (!tester) break;
+        lobby.teams[team].players.push(tester);
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      cleanupReady(lobby);
+      pushLog(lobby, "Leere Slots wurden mit Testern gefüllt.");
+    }
+    return changed;
+  }
+
+  function removeTesterSlots(lobby) {
+    if (lobby.phase !== "waiting") return false;
+    const before = getAllPlayers(lobby).length;
+    ["left", "right"].forEach((team) => {
+      lobby.teams[team].players = lobby.teams[team].players.filter((player) => !isTesterName(player));
+    });
+    cleanupReady(lobby);
+
+    const changed = getAllPlayers(lobby).length !== before;
+    if (changed) pushLog(lobby, "Tester wurden entfernt.");
+    return changed;
+  }
+
+  function markAllPlayersReady(lobby) {
+    if (lobby.phase !== "waiting" || !areTeamsFull(lobby)) return false;
+    lobby.ready.left = [...lobby.teams.left.players];
+    lobby.ready.right = [...lobby.teams.right.players];
+    pushLog(lobby, "Admin hat alle Spieler bereit gesetzt.");
+    startBanPhase(lobby, "left");
+    return true;
   }
 
   function getBanOrder(firstTeam) {
@@ -574,8 +644,18 @@
   }
 
   function renderHistory(lobby) {
-    const adminReset = typeof isAdminLoggedIn === "function" && isAdminLoggedIn()
-      ? `<button class="admin-remove-button" type="button" data-pickban-action="admin-reset">Admin Reset</button>`
+    const hasEmptySlots = lobby.phase === "waiting"
+      && (lobby.teams.left.players.length < 2 || lobby.teams.right.players.length < 2);
+    const hasTester = getAllPlayers(lobby).some(isTesterName);
+    const adminControls = isPickBanAdmin()
+      ? `
+        <div class="pickban-admin-actions">
+          <button class="admin-secondary-button" type="button" data-pickban-action="fill-testers" ${hasEmptySlots ? "" : "disabled"}>Tester auffüllen</button>
+          <button class="admin-secondary-button" type="button" data-pickban-action="admin-ready-all" ${lobby.phase === "waiting" && areTeamsFull(lobby) ? "" : "disabled"}>Alle bereit</button>
+          <button class="admin-secondary-button" type="button" data-pickban-action="remove-testers" ${hasTester && lobby.phase === "waiting" ? "" : "disabled"}>Tester entfernen</button>
+          <button class="admin-remove-button" type="button" data-pickban-action="admin-reset">Admin Reset</button>
+        </div>
+      `
       : "";
     const picked = lobby.pickedGames.length
       ? lobby.pickedGames.map((entry) => `<span>R${entry.round}: ${escapeHtml(getGame(lobby, entry.gameId)?.title || entry.gameId)}</span>`).join("")
@@ -586,7 +666,7 @@
           <strong>Locked Games</strong>
           <div class="pickban-history-list">${picked}</div>
         </div>
-        ${adminReset}
+        ${adminControls}
       </section>
     `;
   }
@@ -629,8 +709,22 @@
     }
 
     if (action === "admin-reset") {
+      if (!isPickBanAdmin()) return;
       const lobby = resetLobby(activeLobbyId);
       await saveLobby(lobby);
+      return;
+    }
+
+    if (["fill-testers", "remove-testers", "admin-ready-all"].includes(action)) {
+      if (!isPickBanAdmin()) return;
+      const lobby = cloneLobby(lobbies.get(activeLobbyId) || createDefaultLobby(activeLobbyId));
+      let changed = false;
+
+      if (action === "fill-testers") changed = fillEmptyTesterSlots(lobby);
+      if (action === "remove-testers") changed = removeTesterSlots(lobby);
+      if (action === "admin-ready-all") changed = markAllPlayersReady(lobby);
+
+      if (changed) await saveLobby(lobby);
       return;
     }
 
@@ -759,6 +853,8 @@
     activeLobbyId = getLobbyIdFromHash();
     render();
   });
+
+  document.addEventListener("admin-state-change", render);
 
   seedLocalLobbies();
   render();
