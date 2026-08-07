@@ -2907,6 +2907,7 @@ h1 {
 }
 
 .pickban-game-card {
+  position: relative;
   display: grid;
   min-height: 0;
   padding: 0;
@@ -2933,12 +2934,47 @@ h1 {
 }
 
 .pickban-game-card.locked {
-  opacity: 0.46;
+  border-color: rgba(145, 145, 153, 0.32);
+  opacity: 1;
+  background: rgba(48, 48, 56, 0.74);
 }
 
 .pickban-game-card.banned {
-  border-color: rgba(241, 120, 115, 0.36);
-  opacity: 0.72;
+  border-color: rgba(145, 145, 153, 0.34);
+  opacity: 1;
+  background: rgba(40, 40, 48, 0.82);
+}
+
+.pickban-game-card.locked::before,
+.pickban-game-card.banned::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(35, 35, 42, 0.52);
+  pointer-events: none;
+}
+
+.pickban-game-card.locked::after,
+.pickban-game-card.banned::after {
+  content: "";
+  position: absolute;
+  left: -12%;
+  right: -12%;
+  top: 50%;
+  z-index: 2;
+  height: 9px;
+  background: rgba(62, 62, 70, 0.94);
+  box-shadow: 0 0 12px rgba(10, 7, 16, 0.58);
+  transform: translateY(-50%) rotate(-8deg);
+  pointer-events: none;
+}
+
+.pickban-game-card.locked img,
+.pickban-game-card.banned img,
+.pickban-game-card.locked .pickban-placeholder,
+.pickban-game-card.banned .pickban-placeholder {
+  filter: grayscale(0.9) brightness(0.62);
 }
 
 .pickban-game-card.picked {

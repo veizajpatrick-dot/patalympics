@@ -234,6 +234,23 @@
     return /^tester\s+\d+$/i.test(String(name ?? "").trim());
   }
 
+  function hasTesterInLobby(lobby) {
+    return getAllPlayers(lobby).some(isTesterName);
+  }
+
+  function canAdminControlTeam(lobby, team) {
+    return isPickBanAdmin() && lobby.teams[team]?.players.some(isTesterName);
+  }
+
+  function getAdminTesterBanName(lobby, team) {
+    if (!canAdminControlTeam(lobby, team)) return "";
+    return lobby.teams[team].players.find((player) => isTesterName(player) && !hasUserBanned(lobby, player)) || "";
+  }
+
+  function canAdminBanForTeam(lobby, team) {
+    return Boolean(getAdminTesterBanName(lobby, team));
+  }
+
   function getTesterNameForSlot(lobby, team, slotIndex) {
     const usedKeys = new Set(getAllPlayers(lobby).map(nameKey));
     const preferred = testerSlots[team]?.[slotIndex] || "";
@@ -589,6 +606,7 @@
     }
 
     const currentGame = lobby.currentGame ? getGame(lobby, lobby.currentGame.id) : null;
+    const canAdminTest = isPickBanAdmin() && hasTesterInLobby(lobby);
     return `
       <section class="pickban-phase-panel pickban-game-panel">
         <strong>Aktuelles Spiel</strong>
@@ -600,6 +618,12 @@
           <button class="admin-secondary-button ${lobby.loserTeam === "right" ? "selected" : ""}" type="button" data-pickban-action="set-loser" data-team="right">Team 2 verloren</button>
           <button class="form-button" type="button" data-pickban-action="confirm-round" ${myTeam ? "" : "disabled"}>Nächste Runde bestätigen ${myTeam ? `(${teamLabels[myTeam]})` : ""}</button>
           <button class="admin-secondary-button" type="button" data-pickban-action="finish-lobby" ${myTeam ? "" : "disabled"}>Lobby fertig ${myTeam ? `(${teamLabels[myTeam]})` : ""}</button>
+          ${canAdminTest ? `
+            <button class="admin-secondary-button" type="button" data-pickban-action="admin-confirm-round" data-team="left" ${lobby.loserTeam && canAdminControlTeam(lobby, "left") ? "" : "disabled"}>Team 1 weiter</button>
+            <button class="admin-secondary-button" type="button" data-pickban-action="admin-confirm-round" data-team="right" ${lobby.loserTeam && canAdminControlTeam(lobby, "right") ? "" : "disabled"}>Team 2 weiter</button>
+            <button class="admin-secondary-button" type="button" data-pickban-action="admin-finish-lobby" data-team="left" ${canAdminControlTeam(lobby, "left") ? "" : "disabled"}>Team 1 fertig</button>
+            <button class="admin-secondary-button" type="button" data-pickban-action="admin-finish-lobby" data-team="right" ${canAdminControlTeam(lobby, "right") ? "" : "disabled"}>Team 2 fertig</button>
+          ` : ""}
         </div>
         <div class="pickban-confirm-row">
           <span>Nächste Runde: ${lobby.roundConfirm.left ? "Team 1 ✓" : "Team 1 offen"} · ${lobby.roundConfirm.right ? "Team 2 ✓" : "Team 2 offen"}</span>
@@ -623,8 +647,10 @@
 
   function renderGameGrid(lobby, name, myTeam) {
     const expectedBanTeam = getExpectedBanTeam(lobby);
-    const canBan = lobby.phase === "ban" && myTeam === expectedBanTeam && !hasUserBanned(lobby, name);
-    const canPick = lobby.phase === "pick" && myTeam === lobby.firstBanTeam;
+    const canBan = lobby.phase === "ban"
+      && ((myTeam === expectedBanTeam && !hasUserBanned(lobby, name)) || canAdminBanForTeam(lobby, expectedBanTeam));
+    const canPick = lobby.phase === "pick"
+      && (myTeam === lobby.firstBanTeam || canAdminControlTeam(lobby, lobby.firstBanTeam));
     return `
       <section class="pickban-games" aria-label="Spiele">
         ${lobby.games.map((game) => {
@@ -702,6 +728,74 @@
     return createDefaultLobby(id);
   }
 
+  function applyGameBan(lobby, team, gameId, by) {
+    if (lobby.phase !== "ban" || team !== getExpectedBanTeam(lobby)) return false;
+    if (!gameId || isGameLocked(lobby, gameId) || isGameBanned(lobby, gameId) || hasUserBanned(lobby, by)) return false;
+
+    lobby.currentBans.push({ gameId, team, by, round: lobby.round });
+    pushLog(lobby, `${teamLabels[team]} bannt ${getGame(lobby, gameId)?.title || gameId}.`);
+    const nextTeam = getExpectedBanTeam(lobby);
+    if (!nextTeam) {
+      lobby.phase = "pick";
+      lobby.turnTeam = lobby.firstBanTeam;
+      pushLog(lobby, `${teamLabels[lobby.firstBanTeam]} darf das Spiel wählen.`);
+    } else {
+      lobby.turnTeam = nextTeam;
+    }
+    return true;
+  }
+
+  function applyGamePick(lobby, team, gameId) {
+    if (lobby.phase !== "pick" || team !== lobby.firstBanTeam) return false;
+    if (!gameId || isGameLocked(lobby, gameId) || isGameBanned(lobby, gameId)) return false;
+
+    const game = getGame(lobby, gameId);
+    lobby.currentGame = { id: gameId, pickedBy: team, round: lobby.round };
+    lobby.lockedGames = [...new Set([...lobby.lockedGames, gameId])];
+    lobby.pickedGames.push({ gameId, pickedBy: team, round: lobby.round });
+    lobby.phase = "game";
+    lobby.turnTeam = "";
+    lobby.roundConfirm = { left: false, right: false };
+    lobby.finishConfirm = { left: false, right: false };
+    pushLog(lobby, `${teamLabels[team]} pickt ${game?.title || gameId}.`);
+    return true;
+  }
+
+  function applyLoser(lobby, team) {
+    if (lobby.phase !== "game" || !["left", "right"].includes(team)) return false;
+
+    lobby.loserTeam = team;
+    lobby.roundConfirm = { left: false, right: false };
+    pushLog(lobby, `${teamLabels[team]} wurde als Verlierer markiert.`);
+    return true;
+  }
+
+  function applyRoundConfirm(lobby, team) {
+    if (lobby.phase !== "game" || !["left", "right"].includes(team) || !lobby.loserTeam) return false;
+
+    lobby.roundConfirm[team] = true;
+    lobby.finishConfirm[team] = false;
+    pushLog(lobby, `${teamLabels[team]} bestätigt die nächste Runde.`);
+    if (lobby.roundConfirm.left && lobby.roundConfirm.right) {
+      lobby.round += 1;
+      startBanPhase(lobby, lobby.loserTeam);
+    }
+    return true;
+  }
+
+  function applyFinishConfirm(lobby, team) {
+    if (lobby.phase !== "game" || !["left", "right"].includes(team)) return false;
+
+    lobby.finishConfirm[team] = true;
+    lobby.roundConfirm[team] = false;
+    pushLog(lobby, `${teamLabels[team]} ist fertig.`);
+    if (lobby.finishConfirm.left && lobby.finishConfirm.right) {
+      const id = lobby.id;
+      Object.assign(lobby, resetLobby(id));
+    }
+    return true;
+  }
+
   async function handleAction(action, button) {
     if (action === "select-lobby") {
       setActiveLobby(button.dataset.lobbyId);
@@ -726,6 +820,39 @@
 
       if (changed) await saveLobby(lobby);
       return;
+    }
+
+    if (["ban", "pick", "set-loser", "admin-confirm-round", "admin-finish-lobby"].includes(action) && isPickBanAdmin()) {
+      const lobby = cloneLobby(lobbies.get(activeLobbyId) || createDefaultLobby(activeLobbyId));
+      let changed = false;
+
+      if (action === "ban") {
+        const team = getExpectedBanTeam(lobby);
+        const actor = getAdminTesterBanName(lobby, team);
+        changed = Boolean(actor) && applyGameBan(lobby, team, button.dataset.gameId, actor);
+      }
+
+      if (action === "pick") {
+        changed = canAdminControlTeam(lobby, lobby.firstBanTeam)
+          && applyGamePick(lobby, lobby.firstBanTeam, button.dataset.gameId);
+      }
+
+      if (action === "set-loser") {
+        changed = hasTesterInLobby(lobby) && applyLoser(lobby, button.dataset.team);
+      }
+
+      if (action === "admin-confirm-round") {
+        changed = canAdminControlTeam(lobby, button.dataset.team) && applyRoundConfirm(lobby, button.dataset.team);
+      }
+
+      if (action === "admin-finish-lobby") {
+        changed = canAdminControlTeam(lobby, button.dataset.team) && applyFinishConfirm(lobby, button.dataset.team);
+      }
+
+      if (changed) {
+        await saveLobby(lobby);
+        return;
+      }
     }
 
     await updateActiveLobby((lobby, name) => {
@@ -768,69 +895,29 @@
       if (action === "ban") {
         const expectedTeam = getExpectedBanTeam(lobby);
         const gameId = button.dataset.gameId;
-        if (lobby.phase !== "ban" || myTeam !== expectedTeam || hasUserBanned(lobby, name)) return false;
-        if (!gameId || isGameLocked(lobby, gameId) || isGameBanned(lobby, gameId)) return false;
-        lobby.currentBans.push({ gameId, team: myTeam, by: name, round: lobby.round });
-        pushLog(lobby, `${teamLabels[myTeam]} bannt ${getGame(lobby, gameId)?.title || gameId}.`);
-        const nextTeam = getExpectedBanTeam(lobby);
-        if (!nextTeam) {
-          lobby.phase = "pick";
-          lobby.turnTeam = lobby.firstBanTeam;
-          pushLog(lobby, `${teamLabels[lobby.firstBanTeam]} darf das Spiel wählen.`);
-        } else {
-          lobby.turnTeam = nextTeam;
-        }
-        return true;
+        if (myTeam !== expectedTeam) return false;
+        return applyGameBan(lobby, myTeam, gameId, name);
       }
 
       if (action === "pick") {
         const gameId = button.dataset.gameId;
-        if (lobby.phase !== "pick" || myTeam !== lobby.firstBanTeam) return false;
-        if (!gameId || isGameLocked(lobby, gameId) || isGameBanned(lobby, gameId)) return false;
-        const game = getGame(lobby, gameId);
-        lobby.currentGame = { id: gameId, pickedBy: myTeam, round: lobby.round };
-        lobby.lockedGames = [...new Set([...lobby.lockedGames, gameId])];
-        lobby.pickedGames.push({ gameId, pickedBy: myTeam, round: lobby.round });
-        lobby.phase = "game";
-        lobby.turnTeam = "";
-        lobby.roundConfirm = { left: false, right: false };
-        lobby.finishConfirm = { left: false, right: false };
-        pushLog(lobby, `${teamLabels[myTeam]} pickt ${game?.title || gameId}.`);
-        return true;
+        return applyGamePick(lobby, myTeam, gameId);
       }
 
       if (action === "set-loser") {
-        if (lobby.phase !== "game" || !myTeam) return false;
+        if (!myTeam) return false;
         const loser = button.dataset.team;
-        if (!["left", "right"].includes(loser)) return false;
-        lobby.loserTeam = loser;
-        lobby.roundConfirm = { left: false, right: false };
-        pushLog(lobby, `${teamLabels[loser]} wurde als Verlierer markiert.`);
-        return true;
+        return applyLoser(lobby, loser);
       }
 
       if (action === "confirm-round") {
-        if (lobby.phase !== "game" || !myTeam || !lobby.loserTeam) return false;
-        lobby.roundConfirm[myTeam] = true;
-        lobby.finishConfirm[myTeam] = false;
-        pushLog(lobby, `${teamLabels[myTeam]} bestätigt die nächste Runde.`);
-        if (lobby.roundConfirm.left && lobby.roundConfirm.right) {
-          lobby.round += 1;
-          startBanPhase(lobby, lobby.loserTeam);
-        }
-        return true;
+        if (!myTeam) return false;
+        return applyRoundConfirm(lobby, myTeam);
       }
 
       if (action === "finish-lobby") {
-        if (lobby.phase !== "game" || !myTeam) return false;
-        lobby.finishConfirm[myTeam] = true;
-        lobby.roundConfirm[myTeam] = false;
-        pushLog(lobby, `${teamLabels[myTeam]} ist fertig.`);
-        if (lobby.finishConfirm.left && lobby.finishConfirm.right) {
-          const id = lobby.id;
-          Object.assign(lobby, resetLobby(id));
-        }
-        return true;
+        if (!myTeam) return false;
+        return applyFinishConfirm(lobby, myTeam);
       }
 
       return false;
