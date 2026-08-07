@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pick Ban | Patalympics</title>
+    <link rel="stylesheet" href="styles.css?v=20260807-9" />
+  </head>
+  <body>
+    <header class="site-header" aria-label="Hauptnavigation">
+      <a class="brand" href="index.html" aria-label="Patalympics Startseite">
+        <span class="brand-mark">P</span>
+        <span>Patalympics</span>
+      </a>
+
+      <nav class="main-nav" aria-label="Seiten">
+        <a class="nav-home" href="index.html" aria-label="Home">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 10.8 9-7 9 7" />
+            <path d="M5.5 9.5V20h13V9.5" />
+            <path d="M9.5 20v-6h5v6" />
+          </svg>
+        </a>
+        <a href="news.html">Rules</a>
+        <a href="kalender.html">Schedule</a>
+        <a href="rangliste.html">Rangliste</a>
+        <a href="poll.html">Poll</a>
+        <a href="hall-of-fame.html">Hall of Fame</a>
+        <a href="sponsoren.html">Sponsoren</a>
+        <a href="shop.html">Merch</a>
+      </nav>
+    </header>
+
+    <main class="page-shell content-page pickban-page">
+      <div class="page-shade"></div>
+      <section class="pickban-shell" aria-label="Pick Ban Tool">
+        <div class="pickban-topbar">
+          <div>
+            <p class="pickban-kicker">Patalympics Tool</p>
+            <h1>Pick / Ban Phase</h1>
+          </div>
+          <p id="pickban-sync-status" class="pickban-sync-status">Verbinde...</p>
+        </div>
+
+        <div id="pickban-lobbies" class="pickban-lobbies" aria-label="Lobbys"></div>
+        <section id="pickban-detail" class="pickban-detail" aria-live="polite"></section>
+      </section>
+    </main>
+
+    <dialog id="participant-dialog" class="participant-dialog">
+      <form id="participant-form" class="participant-dialog-form" method="dialog">
+        <div class="participant-dialog-head">
+          <h2>Dein Name</h2>
+          <button id="participant-close" class="admin-secondary-button" type="button">Schließen</button>
+        </div>
+        <label class="field">
+          <span>Name</span>
+          <input id="participant-name" type="text" autocomplete="name" />
+        </label>
+        <button id="participant-save" class="form-button" type="submit">Namen speichern</button>
+        <p id="participant-status" class="form-status" role="status"></p>
+      </form>
+    </dialog>
+
+    <script src="supabase-config.js?v=20260807-6"></script>
+    <script src="site.js?v=20260807-2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="pick-ban.js?v=20260807-11"></script>
+  </body>
+</html>

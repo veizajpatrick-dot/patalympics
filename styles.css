@@ -2568,6 +2568,499 @@ h1 {
   gap: 8px;
 }
 
+.pickban-page {
+  min-height: calc(100vh - 86px);
+}
+
+.pickban-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 14px;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.pickban-topbar,
+.pickban-detail,
+.pickban-phase-panel,
+.pickban-history {
+  border: 1px solid rgba(255, 250, 241, 0.11);
+  background:
+    linear-gradient(135deg, rgba(36, 24, 51, 0.9), rgba(12, 8, 20, 0.9)),
+    rgba(12, 8, 20, 0.86);
+}
+
+.pickban-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+}
+
+.pickban-kicker {
+  margin: 0 0 4px;
+  color: var(--sand);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pickban-topbar h1,
+.pickban-detail-head h2 {
+  margin: 0;
+  color: var(--white);
+  font-size: clamp(1.15rem, 3vw, 2rem);
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.pickban-sync-status {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 250, 241, 0.14);
+  color: rgba(255, 250, 241, 0.76);
+  background: rgba(10, 7, 16, 0.5);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pickban-sync-status[data-state="ok"] {
+  color: #80d88b;
+}
+
+.pickban-sync-status[data-state="warn"] {
+  color: var(--sand);
+}
+
+.pickban-sync-status[data-state="error"] {
+  color: #f17873;
+}
+
+.pickban-lobbies {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pickban-lobby-card {
+  display: grid;
+  gap: 6px;
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid rgba(255, 250, 241, 0.11);
+  color: rgba(255, 250, 241, 0.74);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 241, 0.055), rgba(255, 250, 241, 0.02)),
+    rgba(18, 11, 29, 0.72);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickban-lobby-card.active {
+  border-color: rgba(245, 191, 105, 0.6);
+  background:
+    linear-gradient(135deg, rgba(138, 53, 255, 0.42), rgba(245, 191, 105, 0.08)),
+    rgba(18, 11, 29, 0.88);
+}
+
+.pickban-lobby-card span,
+.pickban-lobby-card small {
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pickban-lobby-card strong {
+  color: var(--white);
+  font-size: 0.92rem;
+  font-weight: 950;
+}
+
+.pickban-detail {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.pickban-detail-head,
+.pickban-history,
+.pickban-team-head,
+.pickban-current-game,
+.pickban-result-actions,
+.pickban-confirm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pickban-round-pill {
+  padding: 7px 10px;
+  border: 1px solid rgba(245, 191, 105, 0.22);
+  color: var(--sand);
+  background: rgba(245, 191, 105, 0.08);
+  font-size: 0.76rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.pickban-match-board {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.72fr) minmax(390px, 1.7fr) minmax(170px, 0.72fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.pickban-center-stage {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.pickban-team {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 100%;
+  padding: 12px;
+  border: 1px solid rgba(255, 250, 241, 0.11);
+  background: rgba(10, 7, 16, 0.38);
+  overflow: hidden;
+}
+
+.pickban-team.left {
+  border-left: 4px solid rgba(245, 191, 105, 0.55);
+}
+
+.pickban-team.right {
+  border-left: 4px solid rgba(138, 53, 255, 0.7);
+}
+
+.pickban-team.ready {
+  border-color: rgba(125, 222, 117, 0.34);
+}
+
+.pickban-team.active-turn {
+  border-color: rgba(245, 191, 105, 0.82);
+  box-shadow:
+    0 0 0 1px rgba(245, 191, 105, 0.18),
+    0 0 28px rgba(245, 191, 105, 0.16);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 191, 105, 0.16), transparent 52%),
+    rgba(10, 7, 16, 0.58);
+}
+
+.pickban-team.active-turn .pickban-team-head span {
+  color: var(--sand);
+}
+
+.pickban-team h3 {
+  margin: 0;
+  color: var(--white);
+  font-size: 0.96rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.pickban-team-head span {
+  color: rgba(255, 250, 241, 0.52);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pickban-player-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pickban-player-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 68px;
+  padding: 7px;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  color: rgba(255, 250, 241, 0.86);
+  background:
+    linear-gradient(135deg, rgba(255, 250, 241, 0.06), rgba(255, 250, 241, 0.02)),
+    rgba(10, 7, 16, 0.36);
+}
+
+.pickban-player-card.ready {
+  border-color: rgba(125, 222, 117, 0.34);
+}
+
+.pickban-player-card.empty {
+  color: rgba(255, 250, 241, 0.38);
+  opacity: 0.74;
+}
+
+.pickban-player-art {
+  display: grid;
+  width: 54px;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid rgba(245, 191, 105, 0.18);
+  background:
+    radial-gradient(circle at 35% 20%, rgba(245, 191, 105, 0.22), transparent 38%),
+    linear-gradient(135deg, rgba(138, 53, 255, 0.28), rgba(10, 7, 16, 0.88));
+  overflow: hidden;
+}
+
+.pickban-player-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pickban-player-art span {
+  color: var(--sand);
+  font-size: 0.94rem;
+  font-weight: 950;
+}
+
+.pickban-player-info {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.pickban-player-info strong {
+  color: var(--white);
+  font-size: 0.84rem;
+  font-weight: 950;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.pickban-player-info small {
+  color: rgba(255, 250, 241, 0.48);
+  font-size: 0.64rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.pickban-player-card.ready .pickban-player-info small {
+  color: #7dde75;
+}
+
+.pickban-player-card.empty .pickban-player-info strong,
+.pickban-player-card.empty .pickban-player-art span {
+  color: rgba(255, 250, 241, 0.38);
+}
+
+.pickban-team-actions,
+.pickban-result-actions {
+  flex-wrap: wrap;
+}
+
+.pickban-phase-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  background: rgba(10, 7, 16, 0.34);
+}
+
+.pickban-phase-panel strong,
+.pickban-history strong {
+  color: var(--sand);
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.pickban-phase-panel p {
+  margin: 0;
+  color: rgba(255, 250, 241, 0.7);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.pickban-ban-strip,
+.pickban-history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pickban-ban-strip span,
+.pickban-history-list span {
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  color: rgba(255, 250, 241, 0.68);
+  background: rgba(10, 7, 16, 0.42);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.pickban-games {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pickban-game-card {
+  display: grid;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 250, 241, 0.11);
+  color: rgba(255, 250, 241, 0.78);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 241, 0.05), rgba(255, 250, 241, 0.02)),
+    rgba(10, 7, 16, 0.44);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.pickban-game-card:disabled {
+  cursor: default;
+}
+
+.pickban-game-card:not(:disabled):hover,
+.pickban-game-card:not(:disabled):focus-visible {
+  border-color: rgba(245, 191, 105, 0.65);
+  background:
+    linear-gradient(180deg, rgba(138, 53, 255, 0.24), rgba(245, 191, 105, 0.06)),
+    rgba(10, 7, 16, 0.7);
+}
+
+.pickban-game-card.locked {
+  opacity: 0.46;
+}
+
+.pickban-game-card.banned {
+  border-color: rgba(241, 120, 115, 0.36);
+  opacity: 0.72;
+}
+
+.pickban-game-card.picked {
+  border-color: rgba(125, 222, 117, 0.48);
+}
+
+.pickban-placeholder,
+.pickban-game-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  object-fit: cover;
+}
+
+.pickban-fallback-placeholder[hidden] {
+  display: none;
+}
+
+.pickban-placeholder {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 250, 241, 0.08);
+  color: rgba(255, 250, 241, 0.42);
+  background:
+    radial-gradient(circle at 30% 20%, rgba(245, 191, 105, 0.16), transparent 36%),
+    linear-gradient(135deg, rgba(138, 53, 255, 0.24), rgba(10, 7, 16, 0.85));
+  font-size: 0.68rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.pickban-game-panel {
+  gap: 12px;
+  border-color: rgba(245, 191, 105, 0.24);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 191, 105, 0.16), transparent 52%),
+    linear-gradient(180deg, rgba(138, 53, 255, 0.16), rgba(10, 7, 16, 0.62));
+}
+
+.pickban-current-game {
+  justify-content: flex-start;
+}
+
+.pickban-current-game .pickban-placeholder {
+  width: min(180px, 36vw);
+  flex: 0 0 auto;
+}
+
+.pickban-center-stage .pickban-current-game {
+  display: grid;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 12px;
+}
+
+.pickban-center-stage .pickban-current-game .pickban-placeholder,
+.pickban-current-image {
+  width: 100%;
+  min-height: 210px;
+  aspect-ratio: 16 / 8;
+  object-fit: cover;
+}
+
+.pickban-center-stage .pickban-result-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pickban-center-stage .pickban-result-actions button {
+  width: 100%;
+  min-height: 42px;
+}
+
+.pickban-result-actions .selected {
+  border-color: rgba(245, 191, 105, 0.62);
+  color: var(--sand);
+}
+
+.pickban-confirm-row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  color: rgba(255, 250, 241, 0.64);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.pickban-history {
+  padding: 12px;
+}
+
+@media (max-width: 840px) {
+  .pickban-lobbies {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pickban-match-board {
+    grid-template-columns: 1fr;
+  }
+
+  .pickban-games {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .pickban-topbar,
+  .pickban-detail-head,
+  .pickban-history,
+  .pickban-current-game {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pickban-lobbies {
+    grid-template-columns: 1fr;
+  }
+
+  .pickban-games {
+    grid-template-columns: 1fr;
+  }
+}
+
 .poll-result-box {
   display: grid;
   gap: 8px;
