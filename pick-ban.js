@@ -585,11 +585,9 @@
 
     if (lobby.phase === "ban") {
       const expected = getExpectedBanTeam(lobby);
-      const userAlreadyBanned = hasUserBanned(lobby, name);
       return `
         <section class="pickban-phase-panel">
           <strong>Ban Phase</strong>
-          <p>${teamLabels[expected]} ist dran. Pro Runde gibt es 2 Bans pro Team, abwechselnd. ${userAlreadyBanned ? "Du hast in dieser Runde schon gebannt." : ""}</p>
           ${renderBanStrip(lobby)}
         </section>
       `;
@@ -599,7 +597,6 @@
       return `
         <section class="pickban-phase-panel">
           <strong>Pick Phase</strong>
-          <p>${teamLabels[lobby.firstBanTeam]} wählt jetzt aus den nicht gebannten Spielen. Dieses Spiel wird danach für die Lobby gelockt.</p>
           ${renderBanStrip(lobby)}
         </section>
       `;
