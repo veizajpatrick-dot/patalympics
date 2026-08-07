@@ -2689,8 +2689,7 @@ h1 {
 .pickban-history,
 .pickban-team-head,
 .pickban-current-game,
-.pickban-result-actions,
-.pickban-confirm-row {
+.pickban-result-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2741,7 +2740,12 @@ h1 {
 }
 
 .pickban-team.ready {
-  border-color: rgba(125, 222, 117, 0.34);
+  border-color: rgba(245, 191, 105, 0.36);
+}
+
+.pickban-team.right.ready {
+  border-color: rgba(138, 53, 255, 0.48);
+  border-left-color: rgba(138, 53, 255, 0.82);
 }
 
 .pickban-team.active-turn {
@@ -2754,8 +2758,22 @@ h1 {
     rgba(10, 7, 16, 0.58);
 }
 
+.pickban-team.right.active-turn {
+  border-color: rgba(138, 53, 255, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(138, 53, 255, 0.2),
+    0 0 30px rgba(138, 53, 255, 0.22);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(138, 53, 255, 0.24), transparent 52%),
+    rgba(10, 7, 16, 0.58);
+}
+
 .pickban-team.active-turn .pickban-team-head span {
   color: var(--sand);
+}
+
+.pickban-team.right.active-turn .pickban-team-head span {
+  color: #b991ff;
 }
 
 .pickban-team h3 {
@@ -2793,7 +2811,11 @@ h1 {
 }
 
 .pickban-player-card.ready {
-  border-color: rgba(125, 222, 117, 0.34);
+  border-color: rgba(245, 191, 105, 0.34);
+}
+
+.pickban-team.right .pickban-player-card.ready {
+  border-color: rgba(138, 53, 255, 0.45);
 }
 
 .pickban-player-card.empty {
@@ -2847,7 +2869,11 @@ h1 {
 }
 
 .pickban-player-card.ready .pickban-player-info small {
-  color: #7dde75;
+  color: var(--sand);
+}
+
+.pickban-team.right .pickban-player-card.ready .pickban-player-info small {
+  color: #b991ff;
 }
 
 .pickban-player-card.empty .pickban-player-info strong,
@@ -2978,7 +3004,7 @@ h1 {
 }
 
 .pickban-game-card.picked {
-  border-color: rgba(125, 222, 117, 0.48);
+  border-color: rgba(245, 191, 105, 0.58);
 }
 
 .pickban-placeholder,
@@ -3045,7 +3071,50 @@ h1 {
 
 .pickban-center-stage .pickban-result-actions button {
   width: 100%;
-  min-height: 42px;
+  min-height: 54px;
+}
+
+.pickban-confirm-button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.pickban-action-label {
+  font-size: 0.76rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.pickban-button-state {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.pickban-state-chip {
+  min-width: 30px;
+  padding: 3px 6px;
+  border: 1px solid rgba(255, 250, 241, 0.12);
+  color: rgba(255, 250, 241, 0.36);
+  background: rgba(42, 42, 50, 0.62);
+  font-size: 0.62rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.pickban-state-chip.team-left.done {
+  border-color: rgba(245, 191, 105, 0.62);
+  color: var(--sand);
+  background: rgba(245, 191, 105, 0.14);
+}
+
+.pickban-state-chip.team-right.done {
+  border-color: rgba(138, 53, 255, 0.72);
+  color: #c7a2ff;
+  background: rgba(138, 53, 255, 0.2);
 }
 
 .pickban-result-actions .selected {
@@ -3053,12 +3122,9 @@ h1 {
   color: var(--sand);
 }
 
-.pickban-confirm-row {
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  color: rgba(255, 250, 241, 0.64);
-  font-size: 0.76rem;
-  font-weight: 900;
+.pickban-result-actions .selected[data-team="right"] {
+  border-color: rgba(138, 53, 255, 0.72);
+  color: #c7a2ff;
 }
 
 .pickban-history {

@@ -129,6 +129,7 @@
       lockedGames: [],
       pickedGames: [],
       currentGame: null,
+      loserVotes: { left: "", right: "" },
       loserTeam: "",
       roundConfirm: { left: false, right: false },
       finishConfirm: { left: false, right: false },
@@ -173,6 +174,15 @@
     const leftPlayers = uniqueNames(state.teams?.left?.players);
     const rightPlayers = uniqueNames(state.teams?.right?.players)
       .filter((name) => !leftPlayers.some((leftName) => nameKey(leftName) === nameKey(name)));
+    const savedLoserTeam = ["left", "right"].includes(state.loserTeam) ? state.loserTeam : "";
+    const loserVotes = {
+      left: ["left", "right"].includes(state.loserVotes?.left) ? state.loserVotes.left : "",
+      right: ["left", "right"].includes(state.loserVotes?.right) ? state.loserVotes.right : "",
+    };
+    if (savedLoserTeam && !loserVotes.left && !loserVotes.right) {
+      loserVotes.left = savedLoserTeam;
+      loserVotes.right = savedLoserTeam;
+    }
     const normalized = {
       ...fallback,
       ...state,
@@ -194,7 +204,8 @@
       lockedGames: Array.isArray(state.lockedGames) ? [...new Set(state.lockedGames)] : [],
       pickedGames: Array.isArray(state.pickedGames) ? state.pickedGames : [],
       currentGame: state.currentGame?.id ? state.currentGame : null,
-      loserTeam: ["left", "right"].includes(state.loserTeam) ? state.loserTeam : "",
+      loserVotes,
+      loserTeam: getConfirmedLoserFromVotes(loserVotes),
       roundConfirm: {
         left: Boolean(state.roundConfirm?.left),
         right: Boolean(state.roundConfirm?.right),
@@ -249,6 +260,49 @@
 
   function canAdminBanForTeam(lobby, team) {
     return Boolean(getAdminTesterBanName(lobby, team));
+  }
+
+  function getConfirmedLoserFromVotes(votes = {}) {
+    return votes.left && votes.left === votes.right ? votes.left : "";
+  }
+
+  function getAdminLoserVoteTeam(lobby, loserTeam) {
+    if (!isPickBanAdmin() || !["left", "right"].includes(loserTeam)) return "";
+    return ["left", "right"].find((team) => (
+      canAdminControlTeam(lobby, team) && lobby.loserVotes?.[team] !== loserTeam
+    )) || "";
+  }
+
+  function getAdminConfirmTeam(lobby, confirmations = {}) {
+    if (!isPickBanAdmin()) return "";
+    return ["left", "right"].find((team) => (
+      canAdminControlTeam(lobby, team) && !confirmations[team]
+    )) || "";
+  }
+
+  function canUseTeamConfirm(lobby, myTeam, confirmations = {}) {
+    return Boolean((myTeam && !confirmations[myTeam]) || getAdminConfirmTeam(lobby, confirmations));
+  }
+
+  function renderButtonState(state) {
+    return `
+      <span class="pickban-button-state" aria-hidden="true">
+        <span class="pickban-state-chip team-left${state.left ? " done" : ""}">T1</span>
+        <span class="pickban-state-chip team-right${state.right ? " done" : ""}">T2</span>
+      </span>
+    `;
+  }
+
+  function renderConfirmButton(label, action, state, options = {}) {
+    const teamAttribute = options.team ? ` data-team="${options.team}"` : "";
+    const disabled = options.disabled ? " disabled" : "";
+    const selected = options.selected ? " selected" : "";
+    return `
+      <button class="${options.className || "admin-secondary-button"} pickban-confirm-button${selected}" type="button" data-pickban-action="${action}"${teamAttribute}${disabled}>
+        <span class="pickban-action-label">${escapeHtml(label)}</span>
+        ${renderButtonState(state)}
+      </button>
+    `;
   }
 
   function getTesterNameForSlot(lobby, team, slotIndex) {
@@ -603,7 +657,10 @@
     }
 
     const currentGame = lobby.currentGame ? getGame(lobby, lobby.currentGame.id) : null;
-    const canAdminTest = isPickBanAdmin() && hasTesterInLobby(lobby);
+    const canVoteLoserLeft = Boolean((myTeam && lobby.loserVotes[myTeam] !== "left") || getAdminLoserVoteTeam(lobby, "left"));
+    const canVoteLoserRight = Boolean((myTeam && lobby.loserVotes[myTeam] !== "right") || getAdminLoserVoteTeam(lobby, "right"));
+    const canConfirmRound = Boolean(lobby.loserTeam && canUseTeamConfirm(lobby, myTeam, lobby.roundConfirm));
+    const canConfirmFinish = canUseTeamConfirm(lobby, myTeam, lobby.finishConfirm);
     return `
       <section class="pickban-phase-panel pickban-game-panel">
         <strong>Aktuelles Spiel</strong>
@@ -611,20 +668,21 @@
           ${currentGame ? renderGameVisual(currentGame, "pickban-current-image") : `<div class="pickban-placeholder">Kein Spiel</div>`}
         </div>
         <div class="pickban-result-actions">
-          <button class="admin-secondary-button ${lobby.loserTeam === "left" ? "selected" : ""}" type="button" data-pickban-action="set-loser" data-team="left">Team 1 verloren</button>
-          <button class="admin-secondary-button ${lobby.loserTeam === "right" ? "selected" : ""}" type="button" data-pickban-action="set-loser" data-team="right">Team 2 verloren</button>
-          <button class="form-button" type="button" data-pickban-action="confirm-round" ${myTeam ? "" : "disabled"}>Nächste Runde bestätigen ${myTeam ? `(${teamLabels[myTeam]})` : ""}</button>
-          <button class="admin-secondary-button" type="button" data-pickban-action="finish-lobby" ${myTeam ? "" : "disabled"}>Lobby fertig ${myTeam ? `(${teamLabels[myTeam]})` : ""}</button>
-          ${canAdminTest ? `
-            <button class="admin-secondary-button" type="button" data-pickban-action="admin-confirm-round" data-team="left" ${lobby.loserTeam && canAdminControlTeam(lobby, "left") ? "" : "disabled"}>Team 1 weiter</button>
-            <button class="admin-secondary-button" type="button" data-pickban-action="admin-confirm-round" data-team="right" ${lobby.loserTeam && canAdminControlTeam(lobby, "right") ? "" : "disabled"}>Team 2 weiter</button>
-            <button class="admin-secondary-button" type="button" data-pickban-action="admin-finish-lobby" data-team="left" ${canAdminControlTeam(lobby, "left") ? "" : "disabled"}>Team 1 fertig</button>
-            <button class="admin-secondary-button" type="button" data-pickban-action="admin-finish-lobby" data-team="right" ${canAdminControlTeam(lobby, "right") ? "" : "disabled"}>Team 2 fertig</button>
-          ` : ""}
-        </div>
-        <div class="pickban-confirm-row">
-          <span>Nächste Runde: ${lobby.roundConfirm.left ? "Team 1 ✓" : "Team 1 offen"} · ${lobby.roundConfirm.right ? "Team 2 ✓" : "Team 2 offen"}</span>
-          <span>Fertig: ${lobby.finishConfirm.left ? "Team 1 ✓" : "Team 1 offen"} · ${lobby.finishConfirm.right ? "Team 2 ✓" : "Team 2 offen"}</span>
+          ${renderConfirmButton("Team 1 verloren", "set-loser", {
+            left: lobby.loserVotes.left === "left",
+            right: lobby.loserVotes.right === "left",
+          }, { team: "left", selected: lobby.loserTeam === "left", disabled: !canVoteLoserLeft })}
+          ${renderConfirmButton("Team 2 verloren", "set-loser", {
+            left: lobby.loserVotes.left === "right",
+            right: lobby.loserVotes.right === "right",
+          }, { team: "right", selected: lobby.loserTeam === "right", disabled: !canVoteLoserRight })}
+          ${renderConfirmButton("Nächstes Game", "confirm-round", lobby.roundConfirm, {
+            className: "form-button",
+            disabled: !canConfirmRound,
+          })}
+          ${renderConfirmButton("Bo3/5 fertig", "finish-lobby", lobby.finishConfirm, {
+            disabled: !canConfirmFinish,
+          })}
         </div>
       </section>
     `;
@@ -715,6 +773,7 @@
     lobby.turnTeam = firstTeam;
     lobby.currentBans = [];
     lobby.currentGame = null;
+    lobby.loserVotes = { left: "", right: "" };
     lobby.loserTeam = "";
     lobby.roundConfirm = { left: false, right: false };
     lobby.finishConfirm = { left: false, right: false };
@@ -752,27 +811,33 @@
     lobby.pickedGames.push({ gameId, pickedBy: team, round: lobby.round });
     lobby.phase = "game";
     lobby.turnTeam = "";
+    lobby.loserVotes = { left: "", right: "" };
     lobby.roundConfirm = { left: false, right: false };
     lobby.finishConfirm = { left: false, right: false };
     pushLog(lobby, `${teamLabels[team]} pickt ${game?.title || gameId}.`);
     return true;
   }
 
-  function applyLoser(lobby, team) {
-    if (lobby.phase !== "game" || !["left", "right"].includes(team)) return false;
+  function applyLoser(lobby, loserTeam, voterTeam) {
+    if (lobby.phase !== "game" || !["left", "right"].includes(loserTeam) || !["left", "right"].includes(voterTeam)) return false;
+    if (lobby.loserVotes?.[voterTeam] === loserTeam) return false;
 
-    lobby.loserTeam = team;
+    lobby.loserVotes ??= { left: "", right: "" };
+    lobby.loserVotes[voterTeam] = loserTeam;
+    lobby.loserTeam = getConfirmedLoserFromVotes(lobby.loserVotes);
     lobby.roundConfirm = { left: false, right: false };
-    pushLog(lobby, `${teamLabels[team]} wurde als Verlierer markiert.`);
+    lobby.finishConfirm = { left: false, right: false };
+    pushLog(lobby, `${teamLabels[voterTeam]} bestätigt: ${teamLabels[loserTeam]} verloren.`);
     return true;
   }
 
   function applyRoundConfirm(lobby, team) {
     if (lobby.phase !== "game" || !["left", "right"].includes(team) || !lobby.loserTeam) return false;
+    if (lobby.roundConfirm[team]) return false;
 
     lobby.roundConfirm[team] = true;
     lobby.finishConfirm[team] = false;
-    pushLog(lobby, `${teamLabels[team]} bestätigt die nächste Runde.`);
+    pushLog(lobby, `${teamLabels[team]} bestätigt das nächste Game.`);
     if (lobby.roundConfirm.left && lobby.roundConfirm.right) {
       lobby.round += 1;
       startBanPhase(lobby, lobby.loserTeam);
@@ -782,6 +847,7 @@
 
   function applyFinishConfirm(lobby, team) {
     if (lobby.phase !== "game" || !["left", "right"].includes(team)) return false;
+    if (lobby.finishConfirm[team]) return false;
 
     lobby.finishConfirm[team] = true;
     lobby.roundConfirm[team] = false;
@@ -819,7 +885,7 @@
       return;
     }
 
-    if (["ban", "pick", "set-loser", "admin-confirm-round", "admin-finish-lobby"].includes(action) && isPickBanAdmin()) {
+    if (["ban", "pick", "set-loser", "confirm-round", "finish-lobby"].includes(action) && isPickBanAdmin()) {
       const lobby = cloneLobby(lobbies.get(activeLobbyId) || createDefaultLobby(activeLobbyId));
       let changed = false;
 
@@ -835,15 +901,18 @@
       }
 
       if (action === "set-loser") {
-        changed = hasTesterInLobby(lobby) && applyLoser(lobby, button.dataset.team);
+        const voterTeam = getAdminLoserVoteTeam(lobby, button.dataset.team);
+        changed = Boolean(voterTeam) && applyLoser(lobby, button.dataset.team, voterTeam);
       }
 
-      if (action === "admin-confirm-round") {
-        changed = canAdminControlTeam(lobby, button.dataset.team) && applyRoundConfirm(lobby, button.dataset.team);
+      if (action === "confirm-round") {
+        const team = getAdminConfirmTeam(lobby, lobby.roundConfirm);
+        changed = Boolean(team) && applyRoundConfirm(lobby, team);
       }
 
-      if (action === "admin-finish-lobby") {
-        changed = canAdminControlTeam(lobby, button.dataset.team) && applyFinishConfirm(lobby, button.dataset.team);
+      if (action === "finish-lobby") {
+        const team = getAdminConfirmTeam(lobby, lobby.finishConfirm);
+        changed = Boolean(team) && applyFinishConfirm(lobby, team);
       }
 
       if (changed) {
@@ -904,7 +973,7 @@
       if (action === "set-loser") {
         if (!myTeam) return false;
         const loser = button.dataset.team;
-        return applyLoser(lobby, loser);
+        return applyLoser(lobby, loser, myTeam);
       }
 
       if (action === "confirm-round") {
