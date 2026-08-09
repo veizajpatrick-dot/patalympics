@@ -2735,8 +2735,7 @@ function renderMvpPolls(polls) {
   const participantName = getParticipantName();
   const isAdmin = isAdminLoggedIn();
   const visiblePolls = getMvpPolls(polls).filter((poll) => (
-    (isAdmin && (poll.published || poll.title || poll.voters.length || poll.candidates.length))
-      || (poll.published && isAssignedToMvpPoll(poll, participantName))
+    poll.published && (isAdmin || isAssignedToMvpPoll(poll, participantName))
   ));
 
   mvpPollList.append(...visiblePolls.map(createMvpPollCard));
@@ -3033,9 +3032,7 @@ function createGameVoteResults(config) {
 
 function createMvpResults(poll) {
   const section = createPollResultSection("Auswertung");
-  const allowedVoters = new Set(poll.voters.map(getParticipantKey));
-  const entries = getMvpVoteEntries()
-    .filter((entry) => entry.pollId === poll.id && allowedVoters.has(getParticipantKey(entry.name)));
+  const entries = getMvpVoteEntriesForPoll(poll);
 
   if (!poll.candidates.length) {
     const empty = document.createElement("p");
@@ -3067,6 +3064,18 @@ function createMvpResults(poll) {
   }
 
   return section;
+}
+
+function getMvpVoteEntriesForPoll(poll) {
+  const allowedVoters = new Set((poll.voters ?? []).map(getParticipantKey));
+  return getMvpVoteEntries()
+    .filter((entry) => entry.pollId === poll.id && allowedVoters.has(getParticipantKey(entry.name)));
+}
+
+function getMvpVoteCountText(poll) {
+  const votes = getMvpVoteEntriesForPoll(poll).length;
+  const total = poll.voters?.length ?? 0;
+  return total ? `${votes}/${total} Stimmen` : `${votes} Stimmen`;
 }
 
 function createPollResultButton(titleText, createResults) {
@@ -4237,9 +4246,29 @@ function createPollAdmin(polls, participants = []) {
   addMvpPollButton.textContent = "MVP Poll hinzufügen";
 
   function appendMvpPoll(poll = {}) {
-    const block = document.createElement("div");
+    const pollId = poll.id || createMvpPollId();
+    const block = document.createElement("details");
     block.className = "mvp-poll-admin-block";
-    block.dataset.pollId = poll.id || createMvpPollId();
+    block.dataset.pollId = pollId;
+    block.open = !poll.id;
+
+    const summary = document.createElement("summary");
+    const summaryTitle = document.createElement("span");
+    summaryTitle.className = "mvp-poll-admin-title";
+    summaryTitle.textContent = poll.title?.trim() || "Neuer MVP Poll";
+    const summaryMeta = document.createElement("span");
+    summaryMeta.className = "mvp-poll-admin-meta";
+    summaryMeta.textContent = `${poll.published ? "Freigegeben" : "Entwurf"} / ${getMvpVoteCountText({
+      id: pollId,
+      voters: poll.voters ?? poll.participants ?? [],
+    })}`;
+    const summaryAction = document.createElement("span");
+    summaryAction.className = "mvp-poll-admin-action";
+    summaryAction.textContent = "Bearbeiten";
+    summary.append(summaryTitle, summaryMeta, summaryAction);
+
+    const editor = document.createElement("div");
+    editor.className = "mvp-poll-admin-body";
 
     const published = createAdminInput("checkbox");
     published.className = "mvp-poll-published";
@@ -4308,7 +4337,7 @@ function createPollAdmin(polls, participants = []) {
     const candidateFieldLabel = document.createElement("span");
     candidateFieldLabel.textContent = "Wer kann MVP werden";
     candidateField.append(candidateFieldLabel, candidateList);
-    block.append(
+    editor.append(
       createPollAdminHeader("MVP Poll", published),
       createAdminField("Name", titleField),
       createAdminField("Info", infoField),
@@ -4316,6 +4345,7 @@ function createPollAdmin(polls, participants = []) {
       candidateField,
       actions
     );
+    block.append(summary, editor);
     mvpEditor.append(block);
   }
 
@@ -4396,28 +4426,99 @@ function createPollAdmin(polls, participants = []) {
   });
   gameVote.append(gameVoteDataTitle, gameVoteDataList, gameVoteClear);
 
-  const mvpPollLookup = new Map(getMvpPolls(polls).map((poll) => [poll.id, poll.title]));
+  const mvpPolls = getMvpPolls(polls);
   const mvpDataTitle = document.createElement("h4");
-  mvpDataTitle.textContent = "MVP Votes";
+  mvpDataTitle.textContent = "MVP Stimmen";
+  const knownMvpPollIds = new Set(mvpPolls.map((poll) => poll.id));
+  const mvpVoteGroups = mvpPolls.map((poll) => {
+    const pollEntries = mvpVoteEntries.filter((entry) => entry.pollId === poll.id);
+    const details = document.createElement("details");
+    details.className = "mvp-vote-admin-entry";
+    const summary = document.createElement("summary");
+    const title = document.createElement("span");
+    title.className = "mvp-poll-admin-title";
+    title.textContent = poll.title || "MVP Poll";
+    const meta = document.createElement("span");
+    meta.className = "mvp-poll-admin-meta";
+    meta.textContent = poll.voters.length
+      ? `${pollEntries.length}/${poll.voters.length} Stimmen`
+      : `${pollEntries.length} Stimmen`;
+    const action = document.createElement("span");
+    action.className = "mvp-poll-admin-action";
+    action.textContent = "Aufklappen";
+    summary.append(title, meta, action);
+
+    const body = document.createElement("div");
+    body.className = "mvp-vote-admin-body";
+    const missingVoters = poll.voters.filter((name) => !pollEntries.some((entry) => getParticipantKey(entry.name) === getParticipantKey(name)));
+    if (missingVoters.length) {
+      const missing = document.createElement("p");
+      missing.className = "admin-list-empty";
+      missing.textContent = `Noch offen: ${missingVoters.join(", ")}`;
+      body.append(missing);
+    }
+
+    body.append(createAdminList(
+      pollEntries.map((entry) => {
+        const remove = createActionButton("Löschen", "admin-remove-button");
+        remove.addEventListener("click", () => {
+          deleteMvpVoteEntry(entry.pollId, entry.name);
+          refreshAfterAdminSave(status, "MVP Stimme gelöscht.");
+        });
+        return createAdminEntry(entry.name, entry.candidate, remove);
+      }),
+      "Noch keine Stimmen vorhanden."
+    ));
+
+    const clearPollVotes = createActionButton("Votes löschen");
+    clearPollVotes.disabled = !pollEntries.length;
+    clearPollVotes.addEventListener("click", () => {
+      deleteMvpPollVotes(poll.id);
+      refreshAfterAdminSave(status, "MVP Votes gelöscht.");
+    });
+    body.append(clearPollVotes);
+    details.append(summary, body);
+    return details;
+  });
+  const orphanMvpVotes = mvpVoteEntries.filter((entry) => !knownMvpPollIds.has(entry.pollId));
+  if (orphanMvpVotes.length) {
+    const details = document.createElement("details");
+    details.className = "mvp-vote-admin-entry";
+    const summary = document.createElement("summary");
+    const title = document.createElement("span");
+    title.className = "mvp-poll-admin-title";
+    title.textContent = "Nicht zugeordnete MVP Stimmen";
+    const meta = document.createElement("span");
+    meta.className = "mvp-poll-admin-meta";
+    meta.textContent = `${orphanMvpVotes.length} Stimmen`;
+    const action = document.createElement("span");
+    action.className = "mvp-poll-admin-action";
+    action.textContent = "Aufklappen";
+    summary.append(title, meta, action);
+    const body = document.createElement("div");
+    body.className = "mvp-vote-admin-body";
+    body.append(createAdminList(
+      orphanMvpVotes.map((entry) => {
+        const remove = createActionButton("Löschen", "admin-remove-button");
+        remove.addEventListener("click", () => {
+          deleteMvpVoteEntry(entry.pollId, entry.name);
+          refreshAfterAdminSave(status, "MVP Stimme gelöscht.");
+        });
+        return createAdminEntry(entry.name, `${entry.pollId}: ${entry.candidate}`, remove);
+      }),
+      "Keine nicht zugeordneten Stimmen."
+    ));
+    details.append(summary, body);
+    mvpVoteGroups.push(details);
+  }
   const mvpDataList = createAdminList(
-    mvpVoteEntries.map((entry) => {
-      const remove = createActionButton("LÃ¶schen", "admin-remove-button");
-      remove.addEventListener("click", () => {
-        deleteMvpVoteEntry(entry.pollId, entry.name);
-        refreshAfterAdminSave(status, "MVP Vote gelÃ¶scht.");
-      });
-      return createAdminEntry(
-        entry.name,
-        `${mvpPollLookup.get(entry.pollId) ?? entry.pollId}: ${entry.candidate}`,
-        remove
-      );
-    }),
-    "Noch keine MVP Votes vorhanden."
+    mvpVoteGroups,
+    "Noch keine MVP Polls vorhanden."
   );
-  const mvpClear = createActionButton("Alle MVP Votes lÃ¶schen");
+  const mvpClear = createActionButton("Alle MVP Votes löschen");
   mvpClear.addEventListener("click", () => {
     mvpVoteEntries.forEach((entry) => deleteMvpVoteEntry(entry.pollId, entry.name));
-    refreshAfterAdminSave(status, "Alle MVP Votes gelÃ¶scht.");
+    refreshAfterAdminSave(status, "Alle MVP Votes gelöscht.");
   });
   mvp.append(mvpDataTitle, mvpDataList, mvpClear);
 

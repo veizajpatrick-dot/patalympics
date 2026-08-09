@@ -2523,12 +2523,70 @@ h1 {
   gap: 10px;
 }
 
-.mvp-poll-admin-block {
+.mvp-poll-admin-block,
+.mvp-vote-admin-entry {
+  overflow: hidden;
+  border: 1px solid rgba(255, 250, 241, 0.1);
+  background: rgba(18, 11, 29, 0.34);
+}
+
+.mvp-poll-admin-block summary,
+.mvp-vote-admin-entry summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.mvp-poll-admin-block summary::-webkit-details-marker,
+.mvp-vote-admin-entry summary::-webkit-details-marker {
+  display: none;
+}
+
+.mvp-poll-admin-title {
+  min-width: 0;
+  color: var(--white);
+  font-size: 0.86rem;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mvp-poll-admin-meta {
+  color: var(--sand);
+  font-size: 0.74rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.mvp-poll-admin-action {
+  min-width: 82px;
+  padding: 8px 9px;
+  border: 1px solid rgba(245, 191, 105, 0.26);
+  color: var(--sand);
+  background: rgba(10, 7, 16, 0.34);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.mvp-poll-admin-block[open] .mvp-poll-admin-action,
+.mvp-vote-admin-entry[open] .mvp-poll-admin-action {
+  background: rgba(245, 191, 105, 0.14);
+}
+
+.mvp-poll-admin-body,
+.mvp-vote-admin-body {
   display: grid;
   gap: 9px;
   padding: 10px;
-  border: 1px solid rgba(255, 250, 241, 0.1);
-  background: rgba(18, 11, 29, 0.34);
+  border-top: 1px solid rgba(255, 250, 241, 0.08);
 }
 
 .mvp-user-list {
@@ -3012,7 +3070,7 @@ h1 {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 7;
-  object-fit: cover;
+  object-fit: fill;
 }
 
 .pickban-fallback-placeholder[hidden] {
@@ -3061,7 +3119,7 @@ h1 {
   width: 100%;
   min-height: 210px;
   aspect-ratio: 16 / 8;
-  object-fit: cover;
+  object-fit: fill;
 }
 
 .pickban-center-stage .pickban-result-actions {

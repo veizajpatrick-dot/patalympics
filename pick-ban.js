@@ -23,7 +23,7 @@
     { id: "game-8", title: "2v2 Aram", image: "assets/pickban-2v2-aram.jpeg" },
     { id: "game-9", title: "Straftat 2v2", image: "assets/pickban-straftat-2v2.jpeg" },
     { id: "game-10", title: "Overwatch 2v2", image: "assets/pickban-overwatch-2v2.jpeg" },
-    { id: "game-11", title: "Wingman Minezone", image: "assets/pickban-wingman-minezone.jpeg" },
+    { id: "game-11", title: "Mundo Dodgeball", image: "assets/pickban-mundo_dodgeball.jpg" },
   ];
 
   const lobbies = new Map();
@@ -87,7 +87,10 @@
     const image = String(game?.image || "").trim();
     if (!image) return `<span class="pickban-placeholder"></span>`;
 
-    const classAttribute = imageClass ? ` class="${imageClass}"` : "";
+    const classes = [imageClass, game?.id === "game-11" ? "pickban-game-contain" : ""]
+      .filter(Boolean)
+      .join(" ");
+    const classAttribute = classes ? ` class="${classes}"` : "";
     return `<img${classAttribute} src="${escapeHtml(image)}" alt="" onerror="this.hidden=true;this.nextElementSibling.hidden=false;" /><span class="pickban-placeholder pickban-fallback-placeholder" hidden></span>`;
   }
 
