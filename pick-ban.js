@@ -19,7 +19,7 @@
     { id: "game-4", title: "Slappyball", image: "assets/pickban-slappyball.jpeg" },
     { id: "game-5", title: "Redmatch", image: "assets/pickban-redmatch.jpeg" },
     { id: "game-6", title: "Spellsworn", image: "assets/pickban-spellsworn.jpeg" },
-    { id: "game-7", title: "Bagelball", image: "assets/pickban-bagelball.jpeg" },
+    { id: "game-7", title: "Haxball", image: "assets/pickban-haxball.png" },
     { id: "game-8", title: "2v2 Aram", image: "assets/pickban-2v2-aram.jpeg" },
     { id: "game-9", title: "Straftat 2v2", image: "assets/pickban-straftat-2v2.jpeg" },
     { id: "game-10", title: "Overwatch 2v2", image: "assets/pickban-overwatch-2v2.jpeg" },
