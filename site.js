@@ -2849,8 +2849,11 @@ function initParticipantUi() {
   });
 }
 
-initParticipantUi();
-syncParticipantCard();
+// Feedback can be submitted without registering a participant name.
+if (!document.querySelector("#feedback-form")) {
+  initParticipantUi();
+  syncParticipantCard();
+}
 loadPolls();
 renderUserPage();
 
