@@ -26,6 +26,19 @@ In Supabase:
 
 Wenn du die SQL-Datei später aktualisierst, kannst du sie einfach erneut ausführen.
 
+Für ein bereits eingerichtetes Projekt reicht für die neue Feedback-Funktion der Inhalt
+von `supabase-feedback.sql`: einmal im Supabase SQL Editor ausführen. Anschließend
+die aktualisierten Website-Dateien inklusive `feedback.html` und `feedback.js` hochladen.
+Als Admin erscheint der Tab **Feedback** auch im ausgeschalteten Zustand. Dort
+**Feedback-Tab freischalten** aktivieren und **Freigabe speichern** klicken.
+
+Der Tab ist standardmäßig ausgeschaltet. Besucher können nach der Freigabe beliebig
+oft Feedback mit optionalem Namen einsenden. Die Einsendungen stehen ausschließlich
+in der Tabelle `feedback_entries`, deren Leserechte auf Admins begrenzt sind.
+Beim Ausschalten bleiben vorhandene Einsendungen für Admins lesbar; die Datenbank
+blockiert neue Einsendungen auch über direkte API-Aufrufe. Feedback wird nicht
+im Browser gespeichert.
+
 Dadurch entstehen Tabellen für:
 
 - allgemeine Admin-Inhalte
